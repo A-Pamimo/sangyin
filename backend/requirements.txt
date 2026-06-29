@@ -1,0 +1,21 @@
+# --- Web API ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+pydantic-settings>=2.1
+python-multipart>=0.0.9
+
+# --- TTS (default engine) ---
+# Kokoro-82M: CPU-friendly, Apache-licensed weights. Requires the espeak-ng SYSTEM
+# package (apt-get install espeak-ng / brew install espeak-ng / .msi on Windows).
+kokoro>=0.9.4
+soundfile>=0.12
+numpy>=1.24
+
+# --- Document parsing ---
+pypdf>=4.0            # PDF (BSD, permissive)
+EbookLib>=0.18        # EPUB
+beautifulsoup4>=4.12  # EPUB HTML cleanup
+python-docx>=1.1      # DOCX
+trafilatura>=1.8      # URL article extraction (strips nav/ads)
+pysbd>=0.3.4          # sentence boundary detection (for highlighting alignment)

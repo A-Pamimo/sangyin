@@ -68,6 +68,8 @@ class TTSRequest(BaseModel):
     text: Optional[str] = None
     voice: Optional[str] = None
     lang_code: Optional[str] = None
+    # Resume support: skip sentences whose global index is below this value.
+    start_index: Optional[int] = None
 
 
 # ---- Streaming response chunk ------------------------------------------------

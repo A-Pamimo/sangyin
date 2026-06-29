@@ -13,6 +13,7 @@ import {
 import { Chapter, DocumentT, Voice } from '../src/api/types';
 import { Muted } from '../src/components/ui';
 import { materialize } from '../src/player/offlineCache';
+import { useMediaSession } from '../src/player/useMediaSession';
 import { usePlayer } from '../src/player/usePlayer';
 import { useApi, useAppStore } from '../src/store/appStore';
 import { theme } from '../src/theme';
@@ -92,8 +93,14 @@ export default function ReaderScreen() {
     }
   }, [state.currentIndex, chapter]);
 
+  // OS media controls (web lock screen / notification / media keys).
+  useMediaSession(controller, state, {
+    title: doc?.title ?? 'Sangyin',
+    nowPlaying: chapter?.sentences.find((s) => s.index === state.currentIndex)?.text,
+  });
+
   const startStreaming = useCallback(
-    async (ch: Chapter, autoplay: boolean) => {
+    async (ch: Chapter, autoplay: boolean, startIndex?: number) => {
       if (!doc) return;
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -105,7 +112,7 @@ export default function ReaderScreen() {
       setError(null);
       try {
         for await (const chunk of api.streamTTS(
-          { document_id: doc.id, chapter_id: ch.id, voice, lang_code: lang },
+          { document_id: doc.id, chapter_id: ch.id, voice, lang_code: lang, start_index: startIndex },
           ac.signal,
         )) {
           if (ac.signal.aborted) return;
@@ -128,10 +135,17 @@ export default function ReaderScreen() {
     [api, doc, voice, lang, speed, controller],
   );
 
+  // Where Play should resume: the saved sentence if it's in this chapter, else the top.
+  const resumeIndexFor = (ch: Chapter): number => {
+    const saved = positions[doc!.id];
+    if (saved && saved.chapterId === ch.id) return saved.sentenceIndex;
+    return ch.sentences[0]?.index ?? 0;
+  };
+
   const onPlayPause = () => {
     if (!chapter) return;
     if (startedChapterRef.current !== chapter.id) {
-      startStreaming(chapter, true);
+      startStreaming(chapter, true, resumeIndexFor(chapter));
     } else {
       controller.toggle();
     }
@@ -139,14 +153,9 @@ export default function ReaderScreen() {
 
   const onTapSentence = (sentenceIndex: number) => {
     if (!chapter) return;
-    if (startedChapterRef.current !== chapter.id) {
-      startStreaming(chapter, true).then(() =>
-        // seek once the target chunk exists; controller ignores unknown indices
-        setTimeout(() => controller.seekToSentence(sentenceIndex), 50),
-      );
-    } else {
-      controller.seekToSentence(sentenceIndex);
-    }
+    // Start (or restart) the stream from the tapped sentence. Cached audio makes
+    // re-taps cheap, and this works whether or not that sentence is loaded yet.
+    startStreaming(chapter, true, sentenceIndex);
   };
 
   const onSelectChapter = (i: number) => {
@@ -160,7 +169,9 @@ export default function ReaderScreen() {
     setVoice(v.id, v.lang_code);
     setShowVoices(false);
     if (chapter && startedChapterRef.current === chapter.id) {
-      startStreaming(chapter, state.playing); // re-synthesize current chapter in the new voice
+      // Re-synthesize from the current sentence in the new voice, preserving place.
+      const from = state.currentIndex >= 0 ? state.currentIndex : resumeIndexFor(chapter);
+      startStreaming(chapter, state.playing, from);
     }
   };
 

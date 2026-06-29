@@ -51,4 +51,6 @@ export interface TTSRequestBody {
   text?: string;
   voice?: string;
   lang_code?: string;
+  /** Resume: skip sentences whose global index is below this value. */
+  start_index?: number;
 }

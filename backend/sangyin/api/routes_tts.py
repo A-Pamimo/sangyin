@@ -65,6 +65,10 @@ def stream_tts(req: TTSRequest) -> StreamingResponse:
     lang_code = req.lang_code or settings.default_lang_code
     sentences, doc_id, chapter_id = _resolve_sentences(req)
 
+    # Resume: start synthesizing from a given sentence index instead of the top.
+    if req.start_index is not None:
+        sentences = [s for s in sentences if s.index >= req.start_index]
+
     def generate() -> Iterator[str]:
         for sentence in sentences:
             text = sentence.text.strip()

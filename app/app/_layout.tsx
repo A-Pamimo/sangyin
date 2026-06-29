@@ -1,9 +1,20 @@
+import { setAudioModeAsync } from 'expo-audio';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
 import { theme } from '../src/theme';
 
 export default function RootLayout() {
+  useEffect(() => {
+    // Keep audio playing when the app is backgrounded / the screen is locked.
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch(() => {});
+  }, []);
+
   return (
     <>
       <StatusBar style="light" />

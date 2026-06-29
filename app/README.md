@@ -80,5 +80,29 @@ app/
   (`expo-file-system`) so already-synthesized audio persists.
 - **Streaming:** audio is consumed incrementally from the backend's NDJSON stream
   (true streaming on web; buffered fallback where `fetch` streaming isn't available).
+- **Resume:** the Reader remembers your spot per document. Pressing play resumes from
+  the saved sentence (the client passes `start_index` to `/tts/stream` so synthesis
+  begins mid-chapter instead of from the top). Tapping any sentence plays from there.
 - Dependency versions target **Expo SDK 52**. If you bump the SDK, run
   `npx expo install --fix` to realign native module versions.
+
+## Background audio & media controls
+
+- **Background playback:** configured at startup via `setAudioModeAsync({ shouldPlayInBackground: true, playsInSilentMode: true, interruptionMode: 'doNotMix' })`, so audio keeps
+  playing when the screen locks or the app is backgrounded (`UIBackgroundModes: ["audio"]`
+  is set for iOS in `app.json`).
+  - **Android:** continuous background audio may require a foreground service. With a
+    custom dev build, add the appropriate `FOREGROUND_SERVICE` permissions / config; this
+    is not needed for foreground playback or web.
+- **Media controls (web / mobile browsers / PWA):** the player wires the
+  [Media Session API](https://developer.mozilla.org/docs/Web/API/Media_Session_API), so
+  the OS lock screen / notification / media keys show the document title and drive
+  play / pause / previous / next.
+- **Native lock-screen controls (limitation):** rich iOS/Android lock-screen controls
+  with title, artwork, and remote commands are **not** provided — `expo-audio` doesn't
+  expose now-playing metadata or remote-command handling, and the per-sentence chunked
+  streaming (which powers highlighting) maps poorly to a single now-playing "track".
+  Native audio still continues when locked; full native media controls would require
+  migrating the player to
+  [`react-native-track-player`](https://rntp.dev/), a larger change that trades away the
+  current streaming/highlighting model.

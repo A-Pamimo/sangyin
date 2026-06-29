@@ -8,6 +8,7 @@ internal segment; we concatenate those into one waveform for the requested text.
 from __future__ import annotations
 
 import logging
+import threading
 
 import numpy as np
 
@@ -38,6 +39,9 @@ class KokoroEngine:
 
     def __init__(self) -> None:
         self._pipelines: dict[str, object] = {}
+        # KPipeline isn't safe to call concurrently; serialize synthesis. Streams run in
+        # a threadpool, so concurrent requests would otherwise share one pipeline.
+        self._lock = threading.Lock()
 
     def _pipeline(self, lang_code: str):
         if lang_code not in self._pipelines:
@@ -57,10 +61,11 @@ class KokoroEngine:
         if not text:
             return np.zeros(0, dtype=np.float32)
 
-        pipeline = self._pipeline(lang_code)
-        chunks: list[np.ndarray] = []
-        for _graphemes, _phonemes, audio in pipeline(text, voice=voice):
-            chunks.append(_to_numpy(audio))
+        with self._lock:
+            pipeline = self._pipeline(lang_code)
+            chunks: list[np.ndarray] = []
+            for _graphemes, _phonemes, audio in pipeline(text, voice=voice):
+                chunks.append(_to_numpy(audio))
 
         if not chunks:
             return np.zeros(0, dtype=np.float32)

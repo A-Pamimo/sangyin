@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     default_voice: str = "af_heart"
     default_lang_code: str = "a"
 
+    # Hardening (all optional; safe defaults for personal self-host)
+    # If set, every endpoint except /health requires this key via the X-API-Key header.
+    api_key: str = ""
+    # Reject uploads larger than this many megabytes.
+    max_upload_mb: int = 50
+
     # Storage / cache (documents + generated audio)
     data_dir: Path = Path.home() / ".sangyin"
 

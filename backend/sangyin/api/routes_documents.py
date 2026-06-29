@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from ..config import get_settings
 from ..models import Document, DocumentSummary, TextImportRequest, UrlImportRequest
 from ..parsing import parse_text, parse_upload, parse_url
 from ..storage import get_store
@@ -58,6 +59,12 @@ def import_url(req: UrlImportRequest) -> Document:
 @router.post("/file", response_model=Document)
 async def import_file(file: UploadFile = File(...)) -> Document:
     content = await file.read()
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (limit {get_settings().max_upload_mb} MB)",
+        )
     try:
         doc = parse_upload(file.filename or "upload", content)
     except ValueError as e:

@@ -46,6 +46,8 @@ Settings come from environment variables prefixed `SANGYIN_` (or a `backend/.env
 | `SANGYIN_DEFAULT_VOICE` | `af_heart` | Default voice |
 | `SANGYIN_DEFAULT_LANG_CODE` | `a` | Default Kokoro language code |
 | `SANGYIN_DATA_DIR` | `~/.sangyin` | Documents + audio cache location |
+| `SANGYIN_API_KEY` | `` (off) | If set, all endpoints except `/health` require an `X-API-Key` header |
+| `SANGYIN_MAX_UPLOAD_MB` | `50` | Reject file uploads larger than this |
 
 ## API
 
@@ -103,6 +105,39 @@ class TTSEngine(Protocol):
 Add your engine to the registry in `sangyin/tts/registry.py` and set
 `SANGYIN_TTS_ENGINE=<id>`. Nothing in `api/` or `parsing/` needs to change — that's
 how Chatterbox/Orpheus can be dropped in later.
+
+## Running tests
+
+```bash
+cd backend && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests run fully offline — a fake engine stands in for Kokoro, so no model download or
+torch is required. They cover parsing (including PDF outline → chapters, EPUB, DOCX),
+sentence indexing, the streaming endpoint, `start_index` resume, API-key auth, and the
+upload size limit.
+
+## Production notes
+
+For anything beyond personal localhost use:
+
+- **Auth:** set `SANGYIN_API_KEY` and send it as `X-API-Key`; `/health` stays open for
+  liveness checks.
+- **CORS:** set `SANGYIN_CORS_ORIGINS` to your app's origin(s) instead of `*`
+  (credentials are only enabled for explicitly-listed origins).
+- **Uploads:** tune `SANGYIN_MAX_UPLOAD_MB`.
+- **Concurrency:** Kokoro synthesis is serialized with a lock (KPipeline isn't
+  thread-safe), so run a **single process** and put it behind a reverse proxy (TLS) —
+  multiple workers would each load the model into memory. Scale by running more
+  single-process instances behind a load balancer if needed.
+
+## PDF chapters
+
+When a PDF has an outline (bookmarks / table of contents), it is split into chapters by
+mapping outline entries to page ranges (front matter before the first bookmark becomes
+its own chapter). PDFs without an outline import as a single chapter.
 
 ## Verify the text→audio slice without the API
 

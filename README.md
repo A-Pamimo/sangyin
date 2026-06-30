@@ -35,7 +35,8 @@ sangyin/
 ├── backend/     Python / FastAPI — parsing, TTS, REST API   (see backend/README.md)
 ├── app/         Expo / React Native — web, iOS, Android      (see app/README.md)
 ├── scripts/
-│   └── setup.sh Getting-started: backend setup + first run
+│   ├── setup.sh  Getting-started: backend setup + first run (macOS/Linux)
+│   └── setup.ps1 Getting-started: backend setup + first run (Windows)
 └── README.md
 ```
 
@@ -48,7 +49,8 @@ sangyin/
 ```bash
 git clone <your-fork-url> sangyin
 cd sangyin
-./scripts/setup.sh
+./scripts/setup.sh            # macOS / Linux
+# Windows (PowerShell):  .\scripts\setup.ps1
 ```
 
 That picks a compatible Python (3.10–3.12), creates a virtualenv, installs

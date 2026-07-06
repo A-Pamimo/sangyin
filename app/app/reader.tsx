@@ -126,9 +126,13 @@ export default function ReaderScreen() {
           const uri = await materialize(chunk, { docId: doc.id, chapterId: ch.id, voice });
           controller.addChunk({
             index: chunk.index,
-            text: chunk.text,
             uri,
             duration: chunk.duration_sec,
+            sentences: chunk.sentences.map((s) => ({
+              index: s.index,
+              offsetSec: s.offset_sec,
+              durationSec: s.duration_sec,
+            })),
           });
         }
         if (!ac.signal.aborted) controller.markStreamComplete();

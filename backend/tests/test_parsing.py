@@ -7,13 +7,32 @@ import io
 import docx
 import pytest
 
+from sangyin.models import Sentence
 from sangyin.parsing import parse_text, parse_upload
-from sangyin.parsing.base import build_document, segment_sentences
+from sangyin.parsing.base import build_document, group_sentences, segment_sentences
 
 
 def test_segment_sentences_basic():
     assert segment_sentences("One. Two! Three?") == ["One.", "Two!", "Three?"]
     assert segment_sentences("   ") == []
+
+
+def test_group_sentences_merges_short_and_splits_long():
+    # Short sentences collapse into one phrase; every sentence is kept, in order.
+    short = [Sentence(index=i, text=t) for i, t in enumerate(["One.", "Two.", "Three."])]
+    groups = group_sentences(short)
+    assert [s.index for g in groups for s in g] == [0, 1, 2]
+    assert len(groups) == 1
+
+    # Long sentences split across phrases; the small first group starts playback fast.
+    long = [Sentence(index=i, text="word " * 30) for i in range(4)]
+    groups = group_sentences(long)
+    assert len(groups) > 1
+    assert groups[0][0].index == 0
+    # No sentence is dropped or duplicated.
+    assert [s.index for g in groups for s in g] == [0, 1, 2, 3]
+    # The max_count cap is respected.
+    assert all(len(g) <= 4 for g in groups)
 
 
 def test_pasted_text_global_indices():

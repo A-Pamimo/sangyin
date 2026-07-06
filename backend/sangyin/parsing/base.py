@@ -47,6 +47,40 @@ def segment_sentences(text: str) -> list[str]:
         return [p.strip() for p in parts if p.strip()]
 
 
+def group_sentences(
+    sentences: list[Sentence],
+    first_max_chars: int = 140,
+    max_chars: int = 260,
+    max_count: int = 4,
+) -> list[list[Sentence]]:
+    """Group consecutive sentences into short phrases for natural synthesis.
+
+    Handing Kokoro a whole phrase instead of one sentence at a time preserves
+    intonation and rhythm across the phrase and removes the stop-start gaps
+    between per-sentence clips. The first group is kept small so playback can
+    start quickly; later groups grow up to ``max_chars`` (or ``max_count``
+    sentences), whichever comes first. Grouping is deterministic in the sentence
+    order, so audio-cache keys (the group's first sentence index) stay stable.
+    """
+    groups: list[list[Sentence]] = []
+    cur: list[Sentence] = []
+    cur_len = 0
+    for s in sentences:
+        t = s.text.strip()
+        if not t:
+            continue
+        limit = max_chars if groups else first_max_chars
+        if cur and (cur_len + len(t) > limit or len(cur) >= max_count):
+            groups.append(cur)
+            cur = []
+            cur_len = 0
+        cur.append(s)
+        cur_len += len(t) + 1
+    if cur:
+        groups.append(cur)
+    return groups
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 

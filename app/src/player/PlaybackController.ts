@@ -1,18 +1,22 @@
-import { AudioPlayer, createAudioPlayer } from 'expo-audio';
-import { Platform } from 'react-native';
+import { AudioSink, createAudioSink, NowPlayingMeta } from './audioSink';
 
-export interface NowPlayingMeta {
-  title: string;
-  artist?: string;
+export type { NowPlayingMeta };
+
+/** One sentence's slice within a phrase clip (for highlight sync). */
+export interface ChunkSentenceSpan {
+  index: number;
+  offsetSec: number;
+  durationSec: number;
 }
 
 export interface PlayChunk {
-  /** Sentence index from the parsed document (used for highlighting). */
+  /** The phrase's first sentence index (ordering / identity). */
   index: number;
-  text: string;
   /** Playable source: a data: URI (web/stream) or a file:// URI (offline cache). */
   uri: string;
   duration: number;
+  /** Per-sentence spans within this clip, in playback order. */
+  sentences: ChunkSentenceSpan[];
 }
 
 export interface PlayerSnapshot {
@@ -25,16 +29,18 @@ export interface PlayerSnapshot {
 }
 
 /**
- * Plays an ordered list of per-sentence audio chunks back-to-back, advancing on
- * each chunk's completion. Chunks can be appended while playback is underway
- * (streaming): if playback catches up to the last loaded chunk it buffers and
- * resumes automatically when the next one arrives.
+ * Plays an ordered list of phrase clips back-to-back, advancing on each clip's
+ * completion. Clips can be appended while playback is underway (streaming): if
+ * playback catches up to the last loaded clip it buffers and resumes when the next
+ * arrives. The active *sentence* highlight is driven by playback position within the
+ * current phrase (each clip carries per-sentence offsets).
  */
 export class PlaybackController {
   private chunks: PlayChunk[] = [];
   private pos = 0; // index into `chunks`, not the sentence index
-  private player: AudioPlayer | null = null;
-  private sub: { remove: () => void } | null = null;
+  private sink: AudioSink | null = null;
+  private active = false; // is a clip currently loaded in the sink?
+  private activeSentence = -1;
   private rate = 1;
   private wantPlay = false;
   private buffering = false;
@@ -46,13 +52,23 @@ export class PlaybackController {
   /** Set what the native lock screen shows while this controller plays. */
   setNowPlaying(meta: NowPlayingMeta): void {
     this.meta = meta;
-    this.applyLockScreen();
+    this.sink?.setLockScreen(meta);
   }
 
   // ---- lifecycle ----------------------------------------------------------
 
+  private ensureSink(): AudioSink {
+    if (!this.sink) {
+      this.sink = createAudioSink();
+      if (this.meta) this.sink.setLockScreen(this.meta);
+    }
+    return this.sink;
+  }
+
   reset(): void {
-    this.teardownPlayer();
+    this.sink?.stop();
+    this.active = false;
+    this.activeSentence = -1;
     this.chunks = [];
     this.pos = 0;
     this.wantPlay = false;
@@ -62,7 +78,9 @@ export class PlaybackController {
   }
 
   destroy(): void {
-    this.teardownPlayer();
+    this.sink?.destroy();
+    this.sink = null;
+    this.active = false;
   }
 
   // ---- streaming feed -----------------------------------------------------
@@ -70,14 +88,19 @@ export class PlaybackController {
   addChunk(chunk: PlayChunk): void {
     const wasEmpty = this.chunks.length === 0;
     this.chunks.push(chunk);
-    // Start as soon as the first chunk lands if the user already pressed play.
+    // Start as soon as the first clip lands if the user already pressed play.
     if (wasEmpty && this.wantPlay) {
       this.playAt(0);
     } else if (this.buffering && this.wantPlay) {
-      // We ran out of audio mid-stream; resume with the freshly arrived chunk.
+      // We ran out of audio mid-stream; resume with the freshly arrived clip.
       this.buffering = false;
       this.playAt(this.pos + 1);
     } else {
+      // If this is the phrase right after the one playing, buffer it for a
+      // gapless transition.
+      if (this.active && this.chunks.length === this.pos + 2) {
+        this.sink?.preload(chunk.uri);
+      }
       this.emit();
     }
   }
@@ -91,10 +114,13 @@ export class PlaybackController {
 
   play(): void {
     this.wantPlay = true;
-    if (!this.player && this.chunks.length > 0) {
+    // Runs inside the Play-button gesture: unlock web audio now so the async
+    // playAt() (after synthesis) is allowed to start playback.
+    this.ensureSink().unlock();
+    if (!this.active && this.chunks.length > 0) {
       this.playAt(this.pos);
-    } else if (this.player) {
-      this.player.play();
+    } else if (this.active) {
+      this.sink!.resume();
       this.emit();
     } else {
       this.emit();
@@ -103,7 +129,7 @@ export class PlaybackController {
 
   pause(): void {
     this.wantPlay = false;
-    this.player?.pause();
+    this.sink?.pause();
     this.emit();
   }
 
@@ -120,59 +146,62 @@ export class PlaybackController {
     this.playAt(this.pos > 0 ? this.pos - 1 : 0);
   }
 
-  /** Seek to a chunk by its sentence index (tap-to-play). */
+  /** Seek to a loaded sentence by its index (tap-to-play within buffered audio). */
   seekToSentence(sentenceIndex: number): void {
-    const i = this.chunks.findIndex((c) => c.index === sentenceIndex);
-    if (i >= 0) this.playAt(i);
+    const i = this.chunks.findIndex((c) => c.sentences.some((s) => s.index === sentenceIndex));
+    if (i < 0) return;
+    const span = this.chunks[i].sentences.find((s) => s.index === sentenceIndex);
+    this.playAt(i, span?.offsetSec ?? 0);
   }
 
   setRate(rate: number): void {
     this.rate = rate;
-    if (this.player) {
-      try {
-        this.player.setPlaybackRate(rate);
-      } catch {
-        // some platforms clamp/limit rates; ignore
-      }
-    }
+    if (this.active) this.sink?.setRate(rate);
   }
 
   // ---- internals ----------------------------------------------------------
 
-  private playAt(i: number): void {
+  private playAt(i: number, startAtSec = 0): void {
     if (i < 0 || i >= this.chunks.length) return;
     this.pos = i;
     this.wantPlay = true;
     this.buffering = false;
-    this.teardownPlayer();
+    this.active = true;
 
     const chunk = this.chunks[i];
-    const player = createAudioPlayer({ uri: chunk.uri });
-    this.player = player;
-    try {
-      player.setPlaybackRate(this.rate);
-    } catch {
-      /* ignore */
-    }
-    this.sub = player.addListener('playbackStatusUpdate', (status: any) => {
-      if (status?.didJustFinish) this.onChunkFinished();
-    });
-    player.play();
-    this.applyLockScreen();
+    this.activeSentence = this.sentenceAt(chunk, startAtSec);
+    this.ensureSink().play(
+      chunk.uri,
+      this.rate,
+      {
+        onProgress: (t) => this.onProgress(t),
+        onFinish: () => this.onChunkFinished(),
+      },
+      startAtSec,
+    );
+    // Buffer the next phrase (if already streamed) for a gapless hand-off.
+    const nextChunk = this.chunks[i + 1];
+    if (nextChunk) this.sink?.preload(nextChunk.uri);
     this.emit();
   }
 
-  /** Native lock-screen "now playing" info (web uses the Media Session hook instead). */
-  private applyLockScreen(): void {
-    if (Platform.OS === 'web' || !this.player || !this.meta) return;
-    try {
-      this.player.setActiveForLockScreen(true, {
-        title: this.meta.title,
-        artist: this.meta.artist ?? 'Sangyin',
-        albumTitle: 'Sangyin',
-      });
-    } catch {
-      // Older runtimes without lock-screen support — background audio still works.
+  /** Which sentence index is being spoken at time `t` within a phrase clip. */
+  private sentenceAt(chunk: PlayChunk, t: number): number {
+    const spans = chunk.sentences;
+    if (spans.length === 0) return chunk.index;
+    for (const s of spans) {
+      if (t < s.offsetSec + s.durationSec) return s.index;
+    }
+    return spans[spans.length - 1].index;
+  }
+
+  private onProgress(t: number): void {
+    const chunk = this.chunks[this.pos];
+    if (!chunk) return;
+    const idx = this.sentenceAt(chunk, t);
+    if (idx !== this.activeSentence) {
+      this.activeSentence = idx;
+      this.emit();
     }
   }
 
@@ -181,34 +210,20 @@ export class PlaybackController {
       this.playAt(this.pos + 1);
     } else if (this.finishedStreaming) {
       this.wantPlay = false;
-      this.teardownPlayer();
+      this.sink?.stop();
+      this.active = false;
       this.emit(true);
     } else {
-      // Caught up to the stream; wait for the next chunk.
+      // Caught up to the stream; wait for the next clip.
       this.buffering = true;
       this.emit();
-    }
-  }
-
-  private teardownPlayer(): void {
-    if (this.sub) {
-      this.sub.remove();
-      this.sub = null;
-    }
-    if (this.player) {
-      try {
-        this.player.remove();
-      } catch {
-        /* ignore */
-      }
-      this.player = null;
     }
   }
 
   private emit(finished = false): void {
     this.onChange({
       playing: this.wantPlay,
-      currentIndex: this.chunks[this.pos]?.index ?? -1,
+      currentIndex: this.activeSentence,
       loadedCount: this.chunks.length,
       finished,
       buffering: this.buffering,

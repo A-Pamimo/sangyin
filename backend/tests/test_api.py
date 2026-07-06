@@ -36,29 +36,47 @@ def test_document_crud(client):
     assert client.get(f"/documents/{doc_id}").status_code == 404
 
 
-def test_tts_stream_yields_one_chunk_per_sentence(client):
+def test_tts_stream_groups_sentences_into_phrases(client):
     r = client.post(
         "/tts/stream",
         json={"text": "One. Two. Three.", "voice": "t_voice", "lang_code": "a"},
     )
     assert r.status_code == 200
     chunks = _ndjson(r)
-    assert [c["index"] for c in chunks] == [0, 1, 2]
+    # Short sentences are grouped into phrase clips, but every sentence index is
+    # covered exactly once, in order, across the chunks' `sentences` spans.
+    idxs = [s["index"] for c in chunks for s in c["sentences"]]
+    assert idxs == [0, 1, 2]
+    first = chunks[0]
     # audio_b64 decodes to a real WAV.
-    wav = base64.b64decode(chunks[0]["audio_b64"])
+    wav = base64.b64decode(first["audio_b64"])
     assert wav[:4] == b"RIFF"
-    assert chunks[0]["sample_rate"] == 24000
-    assert chunks[0]["duration_sec"] > 0
+    assert first["sample_rate"] == 24000
+    assert first["duration_sec"] > 0
+    # Each sentence carries a non-decreasing offset within its phrase clip.
+    spans = first["sentences"]
+    assert spans[0]["offset_sec"] == 0.0
+    assert [s["offset_sec"] for s in spans] == sorted(s["offset_sec"] for s in spans)
 
 
 def test_tts_stream_start_index_resumes(client):
+    # Long sentences so grouping splits into multiple phrases (phrase 0 = [0],
+    # phrase 1 = [1, 2, 3]); resuming at 2 must skip phrase 0 entirely.
+    sentences = [
+        "This is the very first sentence and it is deliberately quite long indeed.",
+        "Here is the second sentence which also runs on for a good while you see.",
+        "The third sentence continues the pattern of being fairly lengthy as well.",
+        "And finally the fourth sentence wraps things up in a suitably long manner.",
+    ]
     r = client.post(
         "/tts/stream",
-        json={"text": "One. Two. Three. Four.", "voice": "t_voice", "start_index": 2},
+        json={"text": " ".join(sentences), "voice": "t_voice", "start_index": 2},
     )
     chunks = _ndjson(r)
-    assert [c["index"] for c in chunks] == [2, 3]
-    assert chunks[0]["text"] == "Three."
+    idxs = [s["index"] for c in chunks for s in c["sentences"]]
+    # The resume sentence and everything after it are present; earlier phrases dropped.
+    assert 2 in idxs and 3 in idxs
+    assert 0 not in idxs
 
 
 def test_tts_stream_requires_text_or_document(client):

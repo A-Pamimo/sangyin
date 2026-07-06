@@ -37,9 +37,23 @@ export interface Voice {
   gender: 'male' | 'female';
 }
 
-export interface AudioChunk {
+/** One sentence's slice of a phrase clip, used to move the highlight in sync. */
+export interface ChunkSentence {
   index: number;
   text: string;
+  /** Start of this sentence within the phrase audio, in seconds. */
+  offset_sec: number;
+  duration_sec: number;
+}
+
+/**
+ * A synthesized *phrase* — a short group of consecutive sentences rendered as one
+ * natural-sounding clip. `index` is the phrase's first sentence index (ordering /
+ * cache key); `sentences` carries per-sentence offsets for highlighting.
+ */
+export interface AudioChunk {
+  index: number;
+  sentences: ChunkSentence[];
   sample_rate: number;
   duration_sec: number;
   audio_b64: string;

@@ -1,12 +1,15 @@
 """Streaming TTS endpoint — the core of the app.
 
 ``POST /tts/stream`` returns ``application/x-ndjson``: one JSON line per synthesized
-sentence, so the client can start playback after the first sentence instead of waiting
-for the whole document. Each line carries the sentence ``index`` (matching the parsed
-document) so the client can highlight the active sentence in sync with audio.
+*phrase* (a short group of consecutive sentences), so the client can start playback
+after the first phrase instead of waiting for the whole document. Synthesizing a whole
+phrase at once (rather than one sentence at a time) lets Kokoro carry intonation across
+the phrase and avoids the stop-start gaps between per-sentence clips.
 
-Synthesizing per-sentence (rather than handing the whole chapter to Kokoro at once) is
-what keeps audio chunks aligned 1:1 with the sentence indices used for highlighting.
+Each line still resolves to individual sentence indices for highlighting: the payload
+carries a ``sentences`` array with each sentence's ``offset_sec`` into the phrase's
+audio, so the client advances the highlight sub-clip as playback time crosses each
+offset.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from fastapi.responses import StreamingResponse
 
 from ..config import get_settings
 from ..models import Sentence, TTSRequest
-from ..parsing.base import segment_sentences, clean_text
+from ..parsing.base import segment_sentences, clean_text, group_sentences
 from ..storage import get_store
 from ..tts import encode_wav_bytes, get_engine
 
@@ -65,34 +68,62 @@ def stream_tts(req: TTSRequest) -> StreamingResponse:
     lang_code = req.lang_code or settings.default_lang_code
     sentences, doc_id, chapter_id = _resolve_sentences(req)
 
-    # Resume: start synthesizing from a given sentence index instead of the top.
+    # Group into phrases over the *full* sentence list so group boundaries (and thus
+    # cache keys) don't shift with the resume point.
+    groups = group_sentences(sentences)
+
+    # Resume: drop whole phrases that end before the resume point. Playback restarts at
+    # the phrase containing start_index (at most a sentence or two of replay).
     if req.start_index is not None:
-        sentences = [s for s in sentences if s.index >= req.start_index]
+        groups = [g for g in groups if g[-1].index >= req.start_index]
 
     def generate() -> Iterator[str]:
-        for sentence in sentences:
-            text = sentence.text.strip()
+        for group in groups:
+            text = " ".join(s.text.strip() for s in group if s.text.strip())
             if not text:
                 continue
 
+            first_index = group[0].index
             wav_bytes: bytes | None = None
-            # Reuse cached audio when available (also powers offline playback).
+            # Reuse cached audio when available (also powers offline playback). Keyed by
+            # the phrase's first sentence index.
             if doc_id and chapter_id:
-                wav_bytes = store.read_cached_chunk(doc_id, chapter_id, voice, sentence.index)
+                wav_bytes = store.read_cached_chunk(doc_id, chapter_id, voice, first_index)
 
             if wav_bytes is None:
                 audio = engine.synthesize(text, voice=voice, lang_code=lang_code)
                 wav_bytes = encode_wav_bytes(audio, engine.sample_rate)
                 if doc_id and chapter_id:
-                    store.write_cached_chunk(doc_id, chapter_id, voice, sentence.index, wav_bytes)
+                    store.write_cached_chunk(doc_id, chapter_id, voice, first_index, wav_bytes)
 
             # Duration from PCM byte count: (bytes - 44 header) / 2 bytes-per-sample / rate.
-            duration_sec = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
+            total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
+
+            # Apportion the phrase's duration across its sentences by text length so the
+            # client can highlight each sentence as playback crosses its offset. This is
+            # an estimate (speech time ~ char count), which is plenty accurate for a
+            # moving highlight.
+            char_lens = [max(1, len(s.text.strip())) for s in group]
+            total_chars = sum(char_lens)
+            acc = 0.0
+            sentence_spans = []
+            for s, clen in zip(group, char_lens):
+                dur = total * clen / total_chars
+                sentence_spans.append(
+                    {
+                        "index": s.index,
+                        "text": s.text,
+                        "offset_sec": round(acc, 3),
+                        "duration_sec": round(dur, 3),
+                    }
+                )
+                acc += dur
+
             payload = {
-                "index": sentence.index,
-                "text": sentence.text,
+                "index": first_index,
+                "sentences": sentence_spans,
                 "sample_rate": engine.sample_rate,
-                "duration_sec": round(duration_sec, 3),
+                "duration_sec": round(total, 3),
                 "audio_b64": base64.b64encode(wav_bytes).decode("ascii"),
             }
             yield json.dumps(payload) + "\n"

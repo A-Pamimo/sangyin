@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   AudioChunk,
   DocumentSummary,
@@ -54,9 +55,17 @@ export class ApiClient {
 
   async importFile(file: { uri: string; name: string; mimeType?: string }): Promise<DocumentT> {
     const form = new FormData();
-    // React Native FormData accepts {uri,name,type}; on web pass a Blob/File.
-    if (typeof file.uri === 'string' && file.uri.startsWith('blob:')) {
+
+    if (Platform.OS === 'web') {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      form.append('file', blob, file.name);
+    } else if (typeof file.uri === 'string' && file.uri.startsWith('blob:')) {
       const blob = await (await fetch(file.uri)).blob();
+      form.append('file', blob, file.name);
+    } else if (typeof file.uri === 'string' && file.uri.startsWith('file:')) {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
       form.append('file', blob, file.name);
     } else {
       form.append(
@@ -64,7 +73,11 @@ export class ApiClient {
         { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' } as any,
       );
     }
-    const res = await fetch(this.url('/documents/file'), { method: 'POST', body: form });
+
+    const res = await fetch(this.url('/documents/file'), {
+      method: 'POST',
+      body: form,
+    });
     if (!res.ok) throw new ApiError(await this.errorDetail(res));
     return res.json();
   }
@@ -82,7 +95,10 @@ export class ApiClient {
   private async errorDetail(res: Response): Promise<string> {
     try {
       const data = await res.json();
-      return (data as any).detail || `Request failed (${res.status})`;
+      const detail = (data as any).detail;
+      if (typeof detail === 'string') return detail;
+      if (detail != null) return JSON.stringify(detail);
+      return `Request failed (${res.status})`;
     } catch {
       return `Request failed (${res.status})`;
     }

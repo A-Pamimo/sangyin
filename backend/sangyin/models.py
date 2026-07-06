@@ -27,6 +27,9 @@ class Document(BaseModel):
     source_type: SourceType
     chapters: list[Chapter]
     created_at: str  # ISO 8601
+    # True when the original PDF was stored and can be served at /documents/{id}/file
+    # (lets the reader offer a "PDF" view alongside the narrated text).
+    has_pdf: bool = False
 
     @property
     def n_sentences(self) -> int:

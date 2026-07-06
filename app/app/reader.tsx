@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { Chapter, DocumentT, Voice } from '../src/api/types';
+import { PdfView } from '../src/components/PdfView';
 import { Muted } from '../src/components/ui';
 import { materialize } from '../src/player/offlineCache';
 import { useMediaSession } from '../src/player/useMediaSession';
@@ -33,6 +34,7 @@ export default function ReaderScreen() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showVoices, setShowVoices] = useState(false);
+  const [view, setView] = useState<'text' | 'pdf'>('text');
 
   const abortRef = useRef<AbortController | null>(null);
   const startedChapterRef = useRef<string | null>(null);
@@ -230,28 +232,50 @@ export default function ReaderScreen() {
             </View>
           </ScrollView>
         )}
+
+        {doc.has_pdf && (
+          <View style={styles.viewToggle}>
+            {(['text', 'pdf'] as const).map((v) => (
+              <Pressable
+                key={v}
+                onPress={() => setView(v)}
+                style={[styles.toggleBtn, view === v && styles.toggleBtnOn]}
+              >
+                <Text style={[styles.toggleText, view === v && styles.toggleTextOn]}>
+                  {v === 'text' ? 'Text' : 'PDF'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
-      <FlatList
-        ref={listRef}
-        data={chapter.sentences}
-        keyExtractor={(s) => String(s.index)}
-        contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220 }}
-        onScrollToIndexFailed={({ index }) => {
-          setTimeout(
-            () => listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true }),
-            120,
-          );
-        }}
-        renderItem={({ item }) => {
-          const active = item.index === state.currentIndex;
-          return (
-            <Pressable onPress={() => onTapSentence(item.index)}>
-              <Text style={[styles.sentence, active && styles.sentenceActive]}>{item.text} </Text>
-            </Pressable>
-          );
-        }}
-      />
+      {view === 'pdf' && doc.has_pdf ? (
+        <View style={{ flex: 1, backgroundColor: colors.surfaceAlt }}>
+          <PdfView url={api.documentFileUrl(doc.id)} />
+        </View>
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={chapter.sentences}
+          keyExtractor={(s) => String(s.index)}
+          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220 }}
+          onScrollToIndexFailed={({ index }) => {
+            setTimeout(
+              () => listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true }),
+              120,
+            );
+          }}
+          renderItem={({ item }) => {
+            const active = item.index === state.currentIndex;
+            return (
+              <Pressable onPress={() => onTapSentence(item.index)}>
+                <Text style={[styles.sentence, active && styles.sentenceActive]}>{item.text} </Text>
+              </Pressable>
+            );
+          }}
+        />
+      )}
 
       <View style={styles.dock}>
         {error ? <Muted style={{ color: colors.danger, marginBottom: 8 }}>{error}</Muted> : null}
@@ -333,6 +357,20 @@ const makeStyles = (c: Palette) =>
       borderBottomColor: c.border,
     },
     title: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '700' },
+    viewToggle: {
+      flexDirection: 'row',
+      alignSelf: 'flex-start',
+      marginTop: 10,
+      padding: 3,
+      borderRadius: 999,
+      backgroundColor: c.surfaceAlt,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    toggleBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 999 },
+    toggleBtnOn: { backgroundColor: c.accent },
+    toggleText: { fontFamily: tokens.fonts.body, fontSize: 13, fontWeight: '600', color: c.textDim },
+    toggleTextOn: { color: c.onAccent },
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {
       color: c.text,

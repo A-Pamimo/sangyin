@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Iterator
 
 from fastapi import APIRouter, HTTPException
@@ -28,6 +29,73 @@ from ..storage import get_store
 from ..tts import encode_wav_bytes, get_engine
 
 router = APIRouter(prefix="/tts", tags=["tts"])
+
+_NORM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _norm(s: str) -> str:
+    return _NORM_RE.sub("", s.lower())
+
+
+def _spans_from_words(
+    group: list[Sentence], words: list[dict]
+) -> list[tuple[float, float]] | None:
+    """Derive (offset, duration) per sentence from Kokoro word timestamps.
+
+    Walks the ordered word tokens, assigning them to each sentence by matching
+    normalized characters, so a sentence's end time is the end of its last word.
+    Returns None if there are no usable timings, so the caller can fall back to the
+    character-proportional estimate.
+    """
+    if not words:
+        return None
+    spans: list[tuple[float, float]] = []
+    wi = 0
+    n = len(words)
+    prev_end = 0.0
+    for s in group:
+        target = _norm(s.text)
+        if not target:
+            spans.append((round(prev_end, 3), 0.0))
+            continue
+        acc = ""
+        seg_end = prev_end
+        while wi < n and len(acc) < len(target):
+            acc += _norm(words[wi]["text"])
+            seg_end = float(words[wi]["end"])
+            wi += 1
+        dur = max(0.0, seg_end - prev_end)
+        spans.append((round(prev_end, 3), round(dur, 3)))
+        prev_end = seg_end
+    return spans
+
+
+def _synthesize(engine, text: str, voice: str, lang_code: str):
+    """Return (audio, words). Uses the engine's timed API when present (Kokoro),
+    otherwise falls back to plain synthesis with no word timings."""
+    timed = getattr(engine, "synthesize_timed", None)
+    if timed is not None:
+        return timed(text, voice=voice, lang_code=lang_code)
+    return engine.synthesize(text, voice=voice, lang_code=lang_code), []
+
+
+def _sentence_spans(group: list[Sentence], words: list[dict], total: float) -> list[dict]:
+    """Per-sentence highlight spans: real word timings when available, else an
+    estimate apportioned by text length."""
+    tuples = _spans_from_words(group, words)
+    if tuples is None:
+        char_lens = [max(1, len(s.text.strip())) for s in group]
+        total_chars = sum(char_lens)
+        acc = 0.0
+        tuples = []
+        for clen in char_lens:
+            dur = total * clen / total_chars
+            tuples.append((round(acc, 3), round(dur, 3)))
+            acc += dur
+    return [
+        {"index": s.index, "text": s.text, "offset_sec": off, "duration_sec": dur}
+        for s, (off, dur) in zip(group, tuples)
+    ]
 
 
 def _resolve_sentences(req: TTSRequest) -> tuple[list[Sentence], str | None, str | None]:
@@ -85,39 +153,31 @@ def stream_tts(req: TTSRequest) -> StreamingResponse:
 
             first_index = group[0].index
             wav_bytes: bytes | None = None
-            # Reuse cached audio when available (also powers offline playback). Keyed by
-            # the phrase's first sentence index.
+            sentence_spans: list[dict] | None = None
+            # Reuse cached audio + timing when available (also powers offline playback).
+            # Keyed by the phrase's first sentence index.
             if doc_id and chapter_id:
                 wav_bytes = store.read_cached_chunk(doc_id, chapter_id, voice, first_index)
+                if wav_bytes is not None:
+                    meta = store.read_cached_meta(doc_id, chapter_id, voice, first_index)
+                    if meta:
+                        sentence_spans = meta.get("sentences")
 
             if wav_bytes is None:
-                audio = engine.synthesize(text, voice=voice, lang_code=lang_code)
+                audio, words = _synthesize(engine, text, voice, lang_code)
                 wav_bytes = encode_wav_bytes(audio, engine.sample_rate)
+                total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
+                sentence_spans = _sentence_spans(group, words, total)
                 if doc_id and chapter_id:
                     store.write_cached_chunk(doc_id, chapter_id, voice, first_index, wav_bytes)
+                    store.write_cached_meta(
+                        doc_id, chapter_id, voice, first_index, {"sentences": sentence_spans}
+                    )
 
             # Duration from PCM byte count: (bytes - 44 header) / 2 bytes-per-sample / rate.
             total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
-
-            # Apportion the phrase's duration across its sentences by text length so the
-            # client can highlight each sentence as playback crosses its offset. This is
-            # an estimate (speech time ~ char count), which is plenty accurate for a
-            # moving highlight.
-            char_lens = [max(1, len(s.text.strip())) for s in group]
-            total_chars = sum(char_lens)
-            acc = 0.0
-            sentence_spans = []
-            for s, clen in zip(group, char_lens):
-                dur = total * clen / total_chars
-                sentence_spans.append(
-                    {
-                        "index": s.index,
-                        "text": s.text,
-                        "offset_sec": round(acc, 3),
-                        "duration_sec": round(dur, 3),
-                    }
-                )
-                acc += dur
+            if sentence_spans is None:  # cache hit without a sidecar (older cache)
+                sentence_spans = _sentence_spans(group, [], total)
 
             payload = {
                 "index": first_index,

@@ -16,11 +16,13 @@ from .models import Document, DocumentSummary
 
 
 class DocumentStore:
-    def __init__(self, documents_dir: Path, audio_dir: Path) -> None:
+    def __init__(self, documents_dir: Path, audio_dir: Path, originals_dir: Path) -> None:
         self.documents_dir = documents_dir
         self.audio_dir = audio_dir
+        self.originals_dir = originals_dir
         self.documents_dir.mkdir(parents=True, exist_ok=True)
         self.audio_dir.mkdir(parents=True, exist_ok=True)
+        self.originals_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- documents ----------------------------------------------------------
 
@@ -65,7 +67,21 @@ class DocumentStore:
             for f in doc_audio.rglob("*"):
                 if f.is_file():
                     f.unlink(missing_ok=True)
+        # Drop the stored original file, if any.
+        self.original_pdf_path(doc_id).unlink(missing_ok=True)
         return existed
+
+    # ---- original files (for the reader's PDF view) -------------------------
+
+    def original_pdf_path(self, doc_id: str) -> Path:
+        return self.originals_dir / f"{doc_id}.pdf"
+
+    def save_original_pdf(self, doc_id: str, content: bytes) -> None:
+        self.original_pdf_path(doc_id).write_bytes(content)
+
+    def read_original_pdf(self, doc_id: str) -> bytes | None:
+        path = self.original_pdf_path(doc_id)
+        return path.read_bytes() if path.exists() else None
 
     # ---- audio cache --------------------------------------------------------
 
@@ -85,6 +101,29 @@ class DocumentStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(wav_bytes)
 
+    # Sidecar JSON holding per-sentence timing for a cached phrase clip, so replays
+    # keep the accurate (word-timestamp-derived) highlight offsets without re-synth.
+    def _meta_path(self, doc_id: str, chapter_id: str, voice: str, index: int) -> Path:
+        return self.audio_chunk_path(doc_id, chapter_id, voice, index).with_suffix(".json")
+
+    def read_cached_meta(
+        self, doc_id: str, chapter_id: str, voice: str, index: int
+    ) -> dict | None:
+        path = self._meta_path(doc_id, chapter_id, voice, index)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    def write_cached_meta(
+        self, doc_id: str, chapter_id: str, voice: str, index: int, meta: dict
+    ) -> None:
+        path = self._meta_path(doc_id, chapter_id, voice, index)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(meta), encoding="utf-8")
+
 
 _store: DocumentStore | None = None
 
@@ -93,5 +132,7 @@ def get_store() -> DocumentStore:
     global _store
     if _store is None:
         settings = get_settings()
-        _store = DocumentStore(settings.documents_dir, settings.audio_cache_dir)
+        _store = DocumentStore(
+            settings.documents_dir, settings.audio_cache_dir, settings.originals_dir
+        )
     return _store

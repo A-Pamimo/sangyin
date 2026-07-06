@@ -10,6 +10,7 @@ Library/read/delete operate on stored documents.
 from __future__ import annotations
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from ..config import get_settings
 from ..models import Document, DocumentSummary, TextImportRequest, UrlImportRequest
@@ -69,5 +70,23 @@ async def import_file(file: UploadFile = File(...)) -> Document:
         doc = parse_upload(file.filename or "upload", content)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    get_store().save(doc)
+    store = get_store()
+    # Keep the original PDF so the reader can show it alongside the narrated text.
+    if doc.source_type == "pdf":
+        store.save_original_pdf(doc.id, content)
+        doc.has_pdf = True
+    store.save(doc)
     return doc
+
+
+@router.get("/{doc_id}/file")
+def get_document_file(doc_id: str) -> Response:
+    """Serve the stored original file (PDF) for the reader's PDF view."""
+    data = get_store().read_original_pdf(doc_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="No original file for this document")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"},
+    )

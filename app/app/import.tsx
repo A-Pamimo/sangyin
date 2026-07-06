@@ -1,13 +1,19 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, Muted, Screen } from '../src/components/ui';
 import { useApi } from '../src/store/appStore';
 import { Palette, tokens, useTheme } from '../src/theme';
 
 type Tab = 'paste' | 'url' | 'file';
+
+const BUSY_LABEL: Record<Tab, string> = {
+  paste: 'Preparing your document…',
+  url: 'Fetching and cleaning the article…',
+  file: 'Reading and extracting your file…',
+};
 
 export default function ImportScreen() {
   const api = useApi();
@@ -133,6 +139,18 @@ export default function ImportScreen() {
           </Card>
         )}
       </ScrollView>
+
+      {busy && (
+        <View style={styles.overlay} pointerEvents="auto">
+          <View style={styles.overlayCard}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={styles.overlayText}>{BUSY_LABEL[tab]}</Text>
+            <Muted style={{ marginTop: 4, textAlign: 'center' }}>
+              Large documents can take a few moments.
+            </Muted>
+          </View>
+        </View>
+      )}
     </Screen>
   );
 }
@@ -153,4 +171,33 @@ const makeStyles = (c: Palette) =>
       fontSize: 15,
     },
     multiline: { minHeight: 180, textAlignVertical: 'top' },
+    overlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.bg + 'E6',
+    },
+    overlayCard: {
+      alignItems: 'center',
+      gap: 14,
+      padding: tokens.space(8),
+      borderRadius: tokens.radius,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      maxWidth: 320,
+      ...tokens.shadow,
+    },
+    overlayText: {
+      fontFamily: tokens.fonts.display,
+      color: c.text,
+      fontSize: 17,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+      textAlign: 'center',
+    },
   });

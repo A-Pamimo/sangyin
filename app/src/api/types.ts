@@ -20,6 +20,8 @@ export interface DocumentT {
   source_type: SourceType;
   chapters: Chapter[];
   created_at: string;
+  /** True when the original PDF is stored and can be shown in the reader's PDF view. */
+  has_pdf?: boolean;
 }
 
 export interface DocumentSummary {

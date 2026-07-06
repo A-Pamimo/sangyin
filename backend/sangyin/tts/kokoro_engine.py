@@ -57,19 +57,44 @@ class KokoroEngine:
         return KOKORO_VOICES
 
     def synthesize(self, text: str, voice: str, lang_code: str) -> np.ndarray:
+        return self.synthesize_timed(text, voice, lang_code)[0]
+
+    def synthesize_timed(
+        self, text: str, voice: str, lang_code: str
+    ) -> tuple[np.ndarray, list[dict]]:
+        """Synthesize ``text`` and return ``(audio, words)``.
+
+        ``words`` is a flat list of ``{text, start, end}`` (seconds, absolute within
+        the returned audio) from Kokoro's per-token timestamps — used to align the
+        per-sentence highlight to the real spoken audio instead of estimating it.
+        Timestamps may be absent on some runtimes; callers fall back gracefully.
+        """
         text = text.strip()
         if not text:
-            return np.zeros(0, dtype=np.float32)
+            return np.zeros(0, dtype=np.float32), []
 
         with self._lock:
             pipeline = self._pipeline(lang_code)
             chunks: list[np.ndarray] = []
-            for _graphemes, _phonemes, audio in pipeline(text, voice=voice):
-                chunks.append(_to_numpy(audio))
+            words: list[dict] = []
+            elapsed = 0.0  # start of the current segment within the concatenated audio
+            for result in pipeline(text, voice=voice):
+                audio = _to_numpy(result.audio)
+                for tok in getattr(result, "tokens", None) or []:
+                    start = getattr(tok, "start_ts", None)
+                    end = getattr(tok, "end_ts", None)
+                    ttext = (getattr(tok, "text", "") or "").strip()
+                    if start is None or end is None or not ttext:
+                        continue
+                    words.append(
+                        {"text": ttext, "start": elapsed + float(start), "end": elapsed + float(end)}
+                    )
+                chunks.append(audio)
+                elapsed += len(audio) / self.sample_rate
 
         if not chunks:
-            return np.zeros(0, dtype=np.float32)
-        return np.concatenate(chunks).astype(np.float32)
+            return np.zeros(0, dtype=np.float32), []
+        return np.concatenate(chunks).astype(np.float32), words
 
 
 def _to_numpy(audio) -> np.ndarray:

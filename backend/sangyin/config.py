@@ -44,6 +44,10 @@ class Settings(BaseSettings):
         return self.data_dir / "audio"
 
     @property
+    def originals_dir(self) -> Path:
+        return self.data_dir / "originals"
+
+    @property
     def cors_origin_list(self) -> list[str]:
         if self.cors_origins.strip() == "*":
             return ["*"]

@@ -40,6 +40,11 @@ export class ApiClient {
     return res.json();
   }
 
+  /** Absolute URL of a document's stored original file (PDF), for the PDF view. */
+  documentFileUrl(id: string): string {
+    return this.url(`/documents/${id}/file`);
+  }
+
   async deleteDocument(id: string): Promise<boolean> {
     const res = await fetch(this.url(`/documents/${id}`), { method: 'DELETE' });
     return res.ok;

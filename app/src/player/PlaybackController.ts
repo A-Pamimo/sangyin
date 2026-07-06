@@ -1,10 +1,6 @@
-import { AudioPlayer, createAudioPlayer } from 'expo-audio';
-import { Platform } from 'react-native';
+import { AudioSink, createAudioSink, NowPlayingMeta } from './audioSink';
 
-export interface NowPlayingMeta {
-  title: string;
-  artist?: string;
-}
+export type { NowPlayingMeta };
 
 export interface PlayChunk {
   /** Sentence index from the parsed document (used for highlighting). */
@@ -33,8 +29,8 @@ export interface PlayerSnapshot {
 export class PlaybackController {
   private chunks: PlayChunk[] = [];
   private pos = 0; // index into `chunks`, not the sentence index
-  private player: AudioPlayer | null = null;
-  private sub: { remove: () => void } | null = null;
+  private sink: AudioSink | null = null;
+  private active = false; // is a chunk currently loaded in the sink?
   private rate = 1;
   private wantPlay = false;
   private buffering = false;
@@ -46,13 +42,22 @@ export class PlaybackController {
   /** Set what the native lock screen shows while this controller plays. */
   setNowPlaying(meta: NowPlayingMeta): void {
     this.meta = meta;
-    this.applyLockScreen();
+    this.sink?.setLockScreen(meta);
   }
 
   // ---- lifecycle ----------------------------------------------------------
 
+  private ensureSink(): AudioSink {
+    if (!this.sink) {
+      this.sink = createAudioSink();
+      if (this.meta) this.sink.setLockScreen(this.meta);
+    }
+    return this.sink;
+  }
+
   reset(): void {
-    this.teardownPlayer();
+    this.sink?.stop();
+    this.active = false;
     this.chunks = [];
     this.pos = 0;
     this.wantPlay = false;
@@ -62,7 +67,9 @@ export class PlaybackController {
   }
 
   destroy(): void {
-    this.teardownPlayer();
+    this.sink?.destroy();
+    this.sink = null;
+    this.active = false;
   }
 
   // ---- streaming feed -----------------------------------------------------
@@ -91,10 +98,13 @@ export class PlaybackController {
 
   play(): void {
     this.wantPlay = true;
-    if (!this.player && this.chunks.length > 0) {
+    // Runs inside the Play-button gesture: unlock web audio now so the async
+    // playAt() (after synthesis) is allowed to start playback.
+    this.ensureSink().unlock();
+    if (!this.active && this.chunks.length > 0) {
       this.playAt(this.pos);
-    } else if (this.player) {
-      this.player.play();
+    } else if (this.active) {
+      this.sink!.resume();
       this.emit();
     } else {
       this.emit();
@@ -103,7 +113,7 @@ export class PlaybackController {
 
   pause(): void {
     this.wantPlay = false;
-    this.player?.pause();
+    this.sink?.pause();
     this.emit();
   }
 
@@ -128,13 +138,7 @@ export class PlaybackController {
 
   setRate(rate: number): void {
     this.rate = rate;
-    if (this.player) {
-      try {
-        this.player.setPlaybackRate(rate);
-      } catch {
-        // some platforms clamp/limit rates; ignore
-      }
-    }
+    if (this.active) this.sink?.setRate(rate);
   }
 
   // ---- internals ----------------------------------------------------------
@@ -144,36 +148,11 @@ export class PlaybackController {
     this.pos = i;
     this.wantPlay = true;
     this.buffering = false;
-    this.teardownPlayer();
 
     const chunk = this.chunks[i];
-    const player = createAudioPlayer({ uri: chunk.uri });
-    this.player = player;
-    try {
-      player.setPlaybackRate(this.rate);
-    } catch {
-      /* ignore */
-    }
-    this.sub = player.addListener('playbackStatusUpdate', (status: any) => {
-      if (status?.didJustFinish) this.onChunkFinished();
-    });
-    player.play();
-    this.applyLockScreen();
+    this.active = true;
+    this.ensureSink().play(chunk.uri, this.rate, () => this.onChunkFinished());
     this.emit();
-  }
-
-  /** Native lock-screen "now playing" info (web uses the Media Session hook instead). */
-  private applyLockScreen(): void {
-    if (Platform.OS === 'web' || !this.player || !this.meta) return;
-    try {
-      this.player.setActiveForLockScreen(true, {
-        title: this.meta.title,
-        artist: this.meta.artist ?? 'Sangyin',
-        albumTitle: 'Sangyin',
-      });
-    } catch {
-      // Older runtimes without lock-screen support — background audio still works.
-    }
   }
 
   private onChunkFinished(): void {
@@ -181,27 +160,13 @@ export class PlaybackController {
       this.playAt(this.pos + 1);
     } else if (this.finishedStreaming) {
       this.wantPlay = false;
-      this.teardownPlayer();
+      this.sink?.stop();
+      this.active = false;
       this.emit(true);
     } else {
       // Caught up to the stream; wait for the next chunk.
       this.buffering = true;
       this.emit();
-    }
-  }
-
-  private teardownPlayer(): void {
-    if (this.sub) {
-      this.sub.remove();
-      this.sub = null;
-    }
-    if (this.player) {
-      try {
-        this.player.remove();
-      } catch {
-        /* ignore */
-      }
-      this.player = null;
     }
   }
 

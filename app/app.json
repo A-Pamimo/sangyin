@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f1115"
+      "backgroundColor": "#ECEBE0"
     },
     "ios": {
       "supportsTablet": true,
@@ -27,7 +27,7 @@
       "package": "com.sangyin.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0f1115"
+        "backgroundColor": "#ECEBE0"
       }
     },
     "web": {

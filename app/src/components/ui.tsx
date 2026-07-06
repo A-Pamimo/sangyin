@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,7 +9,12 @@ import {
   ViewStyle,
 } from 'react-native';
 
-import { theme } from '../theme';
+import { Palette, tokens, useTheme } from '../theme';
+
+function useStyles() {
+  const { colors } = useTheme();
+  return useMemo(() => makeStyles(colors), [colors]);
+}
 
 export function Button({
   title,
@@ -26,15 +31,12 @@ export function Button({
   loading?: boolean;
   style?: ViewStyle;
 }) {
-  const bg =
-    variant === 'primary' ? theme.colors.accent : variant === 'danger' ? 'transparent' : 'transparent';
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const bg = variant === 'primary' ? colors.accent : 'transparent';
   const fg =
-    variant === 'primary'
-      ? '#0b0d12'
-      : variant === 'danger'
-        ? theme.colors.danger
-        : theme.colors.text;
-  const border = variant === 'primary' ? theme.colors.accent : theme.colors.border;
+    variant === 'primary' ? colors.onAccent : variant === 'danger' ? colors.danger : colors.text;
+  const border = variant === 'primary' ? colors.accent : colors.border;
   return (
     <Pressable
       onPress={onPress}
@@ -55,39 +57,51 @@ export function Button({
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const styles = useStyles();
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function Screen({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const styles = useStyles();
   return <View style={[styles.screen, style]}>{children}</View>;
 }
 
 export function H1({ children, style }: { children: ReactNode; style?: TextStyle }) {
+  const styles = useStyles();
   return <Text style={[styles.h1, style]}>{children}</Text>;
 }
 
 export function Muted({ children, style }: { children: ReactNode; style?: TextStyle }) {
+  const styles = useStyles();
   return <Text style={[styles.muted, style]}>{children}</Text>;
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.colors.bg, padding: theme.space(4) },
-  btn: {
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnText: { fontSize: 15, fontWeight: '600' },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-    borderRadius: theme.radius,
-    padding: theme.space(4),
-  },
-  h1: { color: theme.colors.text, fontSize: 26, fontWeight: '700' },
-  muted: { color: theme.colors.textDim, fontSize: 13 },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg, padding: tokens.space(4) },
+    btn: {
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: tokens.radius,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    btnText: { fontFamily: tokens.fonts.body, fontSize: 15, fontWeight: '600' },
+    card: {
+      backgroundColor: c.surface,
+      borderColor: c.border,
+      borderWidth: 1,
+      borderRadius: tokens.radius,
+      padding: tokens.space(5),
+      ...tokens.shadow,
+    },
+    h1: {
+      fontFamily: tokens.fonts.display,
+      color: c.text,
+      fontSize: 30,
+      fontWeight: '700',
+      letterSpacing: -0.5,
+    },
+    muted: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 13, lineHeight: 20 },
+  });

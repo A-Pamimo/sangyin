@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,13 +16,15 @@ import { materialize } from '../src/player/offlineCache';
 import { useMediaSession } from '../src/player/useMediaSession';
 import { usePlayer } from '../src/player/usePlayer';
 import { useApi, useAppStore } from '../src/store/appStore';
-import { theme } from '../src/theme';
+import { Palette, tokens, useTheme } from '../src/theme';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const api = useApi();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { voice, lang, speed, setVoice, setSpeed, savePosition, positions } = useAppStore();
   const { controller, state } = usePlayer();
 
@@ -189,7 +191,7 @@ export default function ReaderScreen() {
   if (error && !doc) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: theme.colors.danger, fontWeight: '700' }}>Error</Text>
+        <Text style={{ color: colors.danger, fontWeight: '700' }}>Error</Text>
         <Muted style={{ marginTop: 6 }}>{error}</Muted>
       </View>
     );
@@ -197,7 +199,7 @@ export default function ReaderScreen() {
   if (!doc || !chapter) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={theme.colors.accent} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -210,7 +212,7 @@ export default function ReaderScreen() {
         </Text>
         {doc.chapters.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-            <View style={{ flexDirection: 'row', gap: theme.space(2) }}>
+            <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
               {doc.chapters.map((c, i) => (
                 <Pressable
                   key={c.id}
@@ -234,7 +236,7 @@ export default function ReaderScreen() {
         ref={listRef}
         data={chapter.sentences}
         keyExtractor={(s) => String(s.index)}
-        contentContainerStyle={{ padding: theme.space(4), paddingBottom: 220 }}
+        contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220 }}
         onScrollToIndexFailed={({ index }) => {
           setTimeout(
             () => listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true }),
@@ -252,11 +254,11 @@ export default function ReaderScreen() {
       />
 
       <View style={styles.dock}>
-        {error ? <Muted style={{ color: theme.colors.danger, marginBottom: 8 }}>{error}</Muted> : null}
+        {error ? <Muted style={{ color: colors.danger, marginBottom: 8 }}>{error}</Muted> : null}
 
         {showVoices && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-            <View style={{ flexDirection: 'row', gap: theme.space(2) }}>
+            <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
               {voices.map((v) => (
                 <Pressable
                   key={v.id}
@@ -273,13 +275,13 @@ export default function ReaderScreen() {
         )}
 
         <View style={styles.transport}>
-          <TransportButton label="⏮" onPress={() => controller.prev()} />
+          <TransportButton label="⏮" onPress={() => controller.prev()} color={colors.text} />
           <Pressable onPress={onPlayPause} style={styles.playBtn}>
             <Text style={styles.playIcon}>
               {state.buffering ? '…' : state.playing ? '❚❚' : '▶'}
             </Text>
           </Pressable>
-          <TransportButton label="⏭" onPress={() => controller.next()} />
+          <TransportButton label="⏭" onPress={() => controller.next()} color={colors.text} />
         </View>
 
         <View style={styles.bottomRow}>
@@ -303,74 +305,93 @@ export default function ReaderScreen() {
   );
 }
 
-function TransportButton({ label, onPress }: { label: string; onPress: () => void }) {
+function TransportButton({
+  label,
+  onPress,
+  color,
+}: {
+  label: string;
+  onPress: () => void;
+  color: string;
+}) {
   return (
-    <Pressable onPress={onPress} style={styles.transportBtn}>
-      <Text style={styles.transportIcon}>{label}</Text>
+    <Pressable onPress={onPress} style={{ padding: 10 }}>
+      <Text style={{ color, fontSize: 26 }}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bg },
-  header: {
-    paddingHorizontal: theme.space(4),
-    paddingTop: theme.space(3),
-    paddingBottom: theme.space(2),
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  title: { color: theme.colors.text, fontSize: 18, fontWeight: '700' },
-  sentence: { color: theme.colors.textDim, fontSize: 19, lineHeight: 30 },
-  sentenceActive: {
-    color: theme.colors.text,
-    backgroundColor: theme.colors.accentSoft,
-    fontWeight: '600',
-  },
-  dock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    padding: theme.space(4),
-    paddingBottom: theme.space(6),
-  },
-  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space(6) },
-  transportBtn: { padding: 10 },
-  transportIcon: { color: theme.colors.text, fontSize: 26 },
-  playBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playIcon: { color: '#0b0d12', fontSize: 22, fontWeight: '800' },
-  bottomRow: { flexDirection: 'row', justifyContent: 'center', gap: theme.space(3), marginTop: 14 },
-  smallChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  smallChipText: { color: theme.colors.text, fontSize: 13, fontWeight: '600' },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-    maxWidth: 200,
-  },
-  chipActive: { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accent },
-  chipText: { color: theme.colors.textDim, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: theme.colors.text },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
+    header: {
+      paddingHorizontal: tokens.space(4),
+      paddingTop: tokens.space(3),
+      paddingBottom: tokens.space(2),
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    title: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '700' },
+    sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
+    sentenceActive: {
+      color: c.text,
+      backgroundColor: c.accentSoft,
+      fontWeight: '600',
+    },
+    dock: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: c.surface,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      borderTopLeftRadius: tokens.radius,
+      borderTopRightRadius: tokens.radius,
+      padding: tokens.space(4),
+      paddingBottom: tokens.space(6),
+      shadowColor: '#363E28',
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(6) },
+    playBtn: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: c.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#363E28',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.4,
+      shadowRadius: 16,
+      elevation: 6,
+    },
+    playIcon: { color: c.onAccent, fontSize: 22, fontWeight: '800' },
+    bottomRow: { flexDirection: 'row', justifyContent: 'center', gap: tokens.space(3), marginTop: 14 },
+    smallChip: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surfaceAlt,
+    },
+    smallChipText: { fontFamily: tokens.fonts.body, color: c.text, fontSize: 13, fontWeight: '600' },
+    chip: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surfaceAlt,
+      maxWidth: 200,
+    },
+    chipActive: { backgroundColor: c.accentSoft, borderColor: c.accent },
+    chipText: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 13, fontWeight: '600' },
+    chipTextActive: { color: c.text },
+  });

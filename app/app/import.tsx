@@ -1,17 +1,19 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, Muted, Screen } from '../src/components/ui';
 import { useApi } from '../src/store/appStore';
-import { theme } from '../src/theme';
+import { Palette, tokens, useTheme } from '../src/theme';
 
 type Tab = 'paste' | 'url' | 'file';
 
 export default function ImportScreen() {
   const api = useApi();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [tab, setTab] = useState<Tab>('paste');
   const [text, setText] = useState('');
@@ -54,7 +56,7 @@ export default function ImportScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: theme.space(4) }}>
+      <ScrollView contentContainerStyle={{ gap: tokens.space(4) }}>
         <View style={styles.tabs}>
           {(['paste', 'url', 'file'] as Tab[]).map((t) => (
             <Button
@@ -67,7 +69,7 @@ export default function ImportScreen() {
           ))}
         </View>
 
-        {error ? <Muted style={{ color: theme.colors.danger }}>{error}</Muted> : null}
+        {error ? <Muted style={{ color: colors.danger }}>{error}</Muted> : null}
 
         {tab === 'paste' && (
           <Card>
@@ -77,7 +79,7 @@ export default function ImportScreen() {
               value={title}
               onChangeText={setTitle}
               placeholder="My document"
-              placeholderTextColor={theme.colors.textDim}
+              placeholderTextColor={colors.textDim}
             />
             <Text style={[styles.label, { marginTop: 14 }]}>Text</Text>
             <TextInput
@@ -85,7 +87,7 @@ export default function ImportScreen() {
               value={text}
               onChangeText={setText}
               placeholder="Paste or type the text you want read aloud…"
-              placeholderTextColor={theme.colors.textDim}
+              placeholderTextColor={colors.textDim}
               multiline
             />
             <Button
@@ -106,7 +108,7 @@ export default function ImportScreen() {
               value={url}
               onChangeText={setUrl}
               placeholder="https://example.com/article"
-              placeholderTextColor={theme.colors.textDim}
+              placeholderTextColor={colors.textDim}
               autoCapitalize="none"
               keyboardType="url"
             />
@@ -135,18 +137,20 @@ export default function ImportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  tabs: { flexDirection: 'row', gap: theme.space(2) },
-  label: { color: theme.colors.text, fontSize: 14, fontWeight: '600' },
-  input: {
-    marginTop: 6,
-    backgroundColor: theme.colors.surfaceAlt,
-    color: theme.colors.text,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 12,
-    fontSize: 15,
-  },
-  multiline: { minHeight: 180, textAlignVertical: 'top' },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    tabs: { flexDirection: 'row', gap: tokens.space(2) },
+    label: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 },
+    input: {
+      marginTop: 6,
+      backgroundColor: c.surfaceAlt,
+      color: c.text,
+      borderRadius: tokens.radiusSm,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 12,
+      fontFamily: tokens.fonts.body,
+      fontSize: 15,
+    },
+    multiline: { minHeight: 180, textAlignVertical: 'top' },
+  });

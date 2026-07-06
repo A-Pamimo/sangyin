@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { ApiClient } from '../api/client';
 import { DEFAULT_BACKEND_URL, DEFAULT_LANG, DEFAULT_VOICE } from '../config';
+import type { ThemeName } from '../theme';
 
 export interface Position {
   chapterId: string;
@@ -17,12 +18,14 @@ interface AppState {
   voice: string;
   lang: string;
   speed: number;
+  themeName: ThemeName;
   /** Per-document resume position, keyed by document id. */
   positions: Record<string, Position>;
 
   setBackendUrl: (url: string) => void;
   setVoice: (voice: string, lang?: string) => void;
   setSpeed: (speed: number) => void;
+  setThemeName: (name: ThemeName) => void;
   savePosition: (docId: string, pos: Position) => void;
 }
 
@@ -33,11 +36,13 @@ export const useAppStore = create<AppState>()(
       voice: DEFAULT_VOICE,
       lang: DEFAULT_LANG,
       speed: 1,
+      themeName: 'sage',
       positions: {},
 
       setBackendUrl: (backendUrl) => set({ backendUrl: backendUrl.trim() }),
       setVoice: (voice, lang) => set((s) => ({ voice, lang: lang ?? s.lang })),
       setSpeed: (speed) => set({ speed }),
+      setThemeName: (themeName) => set({ themeName }),
       savePosition: (docId, pos) =>
         set((s) => ({ positions: { ...s.positions, [docId]: pos } })),
     }),
@@ -49,6 +54,7 @@ export const useAppStore = create<AppState>()(
         voice: s.voice,
         lang: s.lang,
         speed: s.speed,
+        themeName: s.themeName,
         positions: s.positions,
       }),
     },

@@ -83,8 +83,9 @@ app/
 - **Resume:** the Reader remembers your spot per document. Pressing play resumes from
   the saved sentence (the client passes `start_index` to `/tts/stream` so synthesis
   begins mid-chapter instead of from the top). Tapping any sentence plays from there.
-- Dependency versions target **Expo SDK 52**. If you bump the SDK, run
-  `npx expo install --fix` to realign native module versions.
+- Dependency versions target **Expo SDK 57** (React 19 / React Native 0.86), the
+  current SDK — which is also what the **Expo Go** app on your phone supports. If you
+  bump the SDK later, run `npx expo install --fix` to realign native module versions.
 
 ## Background audio & media controls
 
@@ -98,11 +99,8 @@ app/
   [Media Session API](https://developer.mozilla.org/docs/Web/API/Media_Session_API), so
   the OS lock screen / notification / media keys show the document title and drive
   play / pause / previous / next.
-- **Native lock-screen controls (limitation):** rich iOS/Android lock-screen controls
-  with title, artwork, and remote commands are **not** provided — `expo-audio` doesn't
-  expose now-playing metadata or remote-command handling, and the per-sentence chunked
-  streaming (which powers highlighting) maps poorly to a single now-playing "track".
-  Native audio still continues when locked; full native media controls would require
-  migrating the player to
-  [`react-native-track-player`](https://rntp.dev/), a larger change that trades away the
-  current streaming/highlighting model.
+- **Native lock-screen now-playing (iOS/Android):** the player registers itself for
+  lock-screen controls via `expo-audio`'s `setActiveForLockScreen`, showing the document
+  title and chapter while playing (requires `interruptionMode: 'doNotMix'`, which is set
+  at startup). One caveat of the per-sentence chunk model: the lock screen's seek bar
+  reflects the current sentence, not the whole chapter.

@@ -1,4 +1,10 @@
 import { AudioPlayer, createAudioPlayer } from 'expo-audio';
+import { Platform } from 'react-native';
+
+export interface NowPlayingMeta {
+  title: string;
+  artist?: string;
+}
 
 export interface PlayChunk {
   /** Sentence index from the parsed document (used for highlighting). */
@@ -33,8 +39,15 @@ export class PlaybackController {
   private wantPlay = false;
   private buffering = false;
   private finishedStreaming = false;
+  private meta: NowPlayingMeta | null = null;
 
   onChange: (s: PlayerSnapshot) => void = () => {};
+
+  /** Set what the native lock screen shows while this controller plays. */
+  setNowPlaying(meta: NowPlayingMeta): void {
+    this.meta = meta;
+    this.applyLockScreen();
+  }
 
   // ---- lifecycle ----------------------------------------------------------
 
@@ -145,7 +158,22 @@ export class PlaybackController {
       if (status?.didJustFinish) this.onChunkFinished();
     });
     player.play();
+    this.applyLockScreen();
     this.emit();
+  }
+
+  /** Native lock-screen "now playing" info (web uses the Media Session hook instead). */
+  private applyLockScreen(): void {
+    if (Platform.OS === 'web' || !this.player || !this.meta) return;
+    try {
+      this.player.setActiveForLockScreen(true, {
+        title: this.meta.title,
+        artist: this.meta.artist ?? 'Sangyin',
+        albumTitle: 'Sangyin',
+      });
+    } catch {
+      // Older runtimes without lock-screen support — background audio still works.
+    }
   }
 
   private onChunkFinished(): void {

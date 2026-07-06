@@ -12,7 +12,7 @@ const INITIAL: PlayerSnapshot = {
 
 /** React binding around a single PlaybackController instance per mount. */
 export function usePlayer(): { controller: PlaybackController; state: PlayerSnapshot } {
-  const ref = useRef<PlaybackController>();
+  const ref = useRef<PlaybackController | null>(null);
   if (!ref.current) ref.current = new PlaybackController();
   const [state, setState] = useState<PlayerSnapshot>(INITIAL);
 

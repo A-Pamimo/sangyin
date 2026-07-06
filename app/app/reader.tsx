@@ -99,6 +99,13 @@ export default function ReaderScreen() {
     nowPlaying: chapter?.sentences.find((s) => s.index === state.currentIndex)?.text,
   });
 
+  // Native lock-screen now-playing info (iOS/Android).
+  useEffect(() => {
+    if (doc && chapter) {
+      controller.setNowPlaying({ title: doc.title, artist: chapter.title });
+    }
+  }, [doc, chapter, controller]);
+
   const startStreaming = useCallback(
     async (ch: Chapter, autoplay: boolean, startIndex?: number) => {
       if (!doc) return;

@@ -41,14 +41,38 @@ SANGYIN_CHATTERBOX_URL=https://<you>--sangyin-chatterbox-web.modal.run
 
 (Leave `SANGYIN_TTS_ENGINE` unset to use fast local Kokoro instead.)
 
-## 3. API server → DigitalOcean (student $200 credit) or any container host
+## 3. API server → DigitalOcean App Platform (student $200 credit)
 
-The `$200` DigitalOcean student credit covers the **CPU** side (App Platform or a
-Droplet) but **excludes GPUs** — which is exactly why the GPU lives on Modal.
+The $200 DigitalOcean student credit covers this **CPU** service (it **excludes
+GPUs** — which is why the GPU lives on Modal). The image is `backend/Dockerfile`
+(CPU-only torch, so it's small), and `.do/app.yaml` is the App Platform spec.
 
+**Deploy (dashboard):** DO → Apps → Create App → connect this GitHub repo → it
+detects the Dockerfile → pick a 2 GB instance (or 1 GB if Chatterbox-only) → add
+the env vars below (mark the R2 keys as *encrypted*) → Deploy. App Platform gives
+you an HTTPS URL — put it in the app's **Settings → Backend URL**.
+
+**Deploy (CLI):**
 ```
-# build/run the FastAPI app (uvicorn main:app), with the env vars above.
-# expose it over HTTPS; point the app's Settings → Backend URL at it.
+doctl apps create --spec .do/app.yaml   # fill REPLACE values / set secrets first
+```
+
+Env vars to set (see `.do/app.yaml`):
+```
+SANGYIN_TTS_ENGINE=chatterbox
+SANGYIN_CHATTERBOX_URL=https://<you>--sangyin-chatterbox-web.modal.run
+SANGYIN_R2_ACCOUNT_ID / _ACCESS_KEY / _SECRET_KEY / _BUCKET
+SANGYIN_CORS_ORIGINS=*        # or your app's origin
+```
+
+> App Platform's filesystem is **ephemeral**, so R2 (step 1) is required in the
+> cloud — without it, cached audio/documents vanish on every restart/deploy.
+
+Try the image locally first:
+```
+docker build -f backend/Dockerfile -t sangyin-api backend
+docker run -p 8080:8080 -e SANGYIN_TTS_ENGINE=kokoro sangyin-api
+curl localhost:8080/health
 ```
 
 Also handy from the Student Pack: **Clerk** (auth) for multi-user, **Doppler**

@@ -1,0 +1,45 @@
+# DigitalOcean App Platform spec. Deploy with:
+#   doctl apps create --spec .do/app.yaml
+# or in the DO dashboard: Apps -> Create -> point at this repo (it detects the
+# Dockerfile). Fill the SECRET values in the dashboard, don't commit them.
+#
+# App Platform has an ephemeral filesystem, so R2 (below) is required in the cloud —
+# local disk won't persist between deploys/restarts.
+name: sangyin-backend
+region: nyc
+services:
+  - name: api
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    github:
+      repo: A-Pamimo/sangyin
+      branch: claude/ios-eas-setup
+      deploy_on_push: true
+    http_port: 8080
+    # 2 GB covers Kokoro-on-CPU; if you only use Chatterbox (via Modal) a 1 GB
+    # instance is enough. Adjust the slug in the dashboard if this one is stale.
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      - key: SANGYIN_CORS_ORIGINS
+        value: "*"
+      # --- Voice: Chatterbox on Modal (or set to "kokoro" for the free CPU voice) ---
+      - key: SANGYIN_TTS_ENGINE
+        value: chatterbox
+      - key: SANGYIN_CHATTERBOX_URL
+        value: https://REPLACE--sangyin-chatterbox-web.modal.run
+      # --- Storage: Cloudflare R2 (required — App Platform disk is ephemeral) ---
+      - key: SANGYIN_R2_ACCOUNT_ID
+        value: REPLACE
+      - key: SANGYIN_R2_BUCKET
+        value: sangyin
+      - key: SANGYIN_R2_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DASHBOARD
+      - key: SANGYIN_R2_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DASHBOARD

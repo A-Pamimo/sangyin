@@ -15,6 +15,7 @@ numpy>=1.24
 # --- Document parsing ---
 pypdf>=4.0            # PDF (BSD, permissive)
 pdfminer.six>=20221105  # PDF text fallback when pypdf can't read a file (MIT)
+boto3>=1.34           # Cloudflare R2 (S3-compatible) blob storage for cloud deploys
 pymupdf>=1.24         # Render PDF pages to images for OCR (AGPL/commercial)
 pytesseract>=0.3.10   # OCR via the Tesseract binary (install tesseract-ocr separately)
 Pillow>=10.0          # Image handling for OCR

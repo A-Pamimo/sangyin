@@ -44,6 +44,12 @@ class Settings(BaseSettings):
 
     # Storage / cache (documents + generated audio)
     data_dir: Path = Path.home() / ".sangyin"
+    # Cloudflare R2 (S3-compatible) for cloud deploys. When all four are set, blobs
+    # (documents, audio, originals) go to R2 instead of local files under data_dir.
+    r2_account_id: str = ""
+    r2_access_key: str = ""
+    r2_secret_key: str = ""
+    r2_bucket: str = ""
 
     @property
     def documents_dir(self) -> Path:

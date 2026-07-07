@@ -40,9 +40,28 @@ export class ApiClient {
     return res.json();
   }
 
-  /** Absolute URL of a document's stored original file (PDF), for the PDF view. */
+  /** Absolute URL of a document's stored original file (PDF) — "open original" link. */
   documentFileUrl(id: string): string {
     return this.url(`/documents/${id}/file`);
+  }
+
+  /** Number of pages in the stored PDF (the reader renders each as an image). */
+  async pdfPageCount(id: string): Promise<number> {
+    const res = await fetch(this.url(`/documents/${id}/pdf/pages`));
+    if (!res.ok) throw new ApiError(`Could not read PDF (${res.status})`);
+    return (await res.json()).pages ?? 0;
+  }
+
+  /** Absolute URL of a single rendered PDF page image. */
+  documentPageUrl(id: string, page: number): string {
+    return this.url(`/documents/${id}/pdf/page/${page}`);
+  }
+
+  /** Kick off (or retry) background OCR for a scanned PDF. */
+  async startOcr(id: string): Promise<{ status: string }> {
+    const res = await fetch(this.url(`/documents/${id}/ocr`), { method: 'POST' });
+    if (!res.ok) throw new ApiError(await this.errorDetail(res));
+    return res.json();
   }
 
   async deleteDocument(id: string): Promise<boolean> {

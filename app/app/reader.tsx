@@ -118,6 +118,31 @@ export default function ReaderScreen() {
     }
   }, [doc]);
 
+  // While background OCR runs on a scanned PDF, poll until the text is ready.
+  useEffect(() => {
+    if (doc?.ocr_status !== 'pending' || !id) return;
+    const iv = setInterval(async () => {
+      try {
+        const d = await api.getDocument(id);
+        setDoc(d);
+        if (d.ocr_status !== 'pending') clearInterval(iv);
+      } catch {
+        /* keep polling */
+      }
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [doc?.ocr_status, id, api]);
+
+  const runOcr = async () => {
+    if (!doc) return;
+    try {
+      const { status } = await api.startOcr(doc.id);
+      setDoc({ ...doc, ocr_status: status as DocumentT['ocr_status'] });
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not start OCR.');
+    }
+  };
+
   const startStreaming = useCallback(
     async (ch: Chapter, autoplay: boolean, startIndex?: number) => {
       if (!doc) return;
@@ -258,9 +283,18 @@ export default function ReaderScreen() {
         )}
       </View>
 
+      {doc.ocr_status === 'pending' ? (
+        <View style={styles.ocrBanner}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <Muted style={{ marginLeft: 10, flex: 1 }}>
+            Reading the scanned pages… text and audio will appear shortly.
+          </Muted>
+        </View>
+      ) : null}
+
       {view === 'pdf' && doc.has_pdf ? (
         <View style={{ flex: 1, backgroundColor: colors.surfaceAlt }}>
-          <PdfView url={api.documentFileUrl(doc.id)} />
+          <PdfView id={doc.id} />
         </View>
       ) : (
         <FlatList
@@ -271,15 +305,24 @@ export default function ReaderScreen() {
           ListEmptyComponent={
             <View style={{ paddingVertical: tokens.space(10), alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>No readable text found</Text>
-              <Muted style={{ marginTop: 8, textAlign: 'center', maxWidth: 320 }}>
-                {doc.has_pdf
-                  ? 'This PDF looks scanned or image-based, so there’s nothing to narrate. You can still read the original in the PDF view.'
-                  : 'This document has no extractable text to read aloud.'}
+              <Muted style={{ marginTop: 8, textAlign: 'center', maxWidth: 340 }}>
+                {doc.ocr_status === 'unavailable'
+                  ? 'This PDF is scanned, and no OCR engine is installed on the backend to read it. Install Tesseract to narrate scanned PDFs.'
+                  : doc.has_pdf
+                    ? 'This PDF looks scanned or image-based. Run OCR to narrate it, or read the original in the PDF view.'
+                    : 'This document has no extractable text to read aloud.'}
               </Muted>
               {doc.has_pdf ? (
-                <Pressable onPress={() => setView('pdf')} style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Open PDF view</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: tokens.space(3), marginTop: tokens.space(5), flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {doc.ocr_status !== 'done' && doc.ocr_status !== 'pending' && doc.ocr_status !== 'unavailable' ? (
+                    <Pressable onPress={runOcr} style={styles.emptyBtn}>
+                      <Text style={styles.emptyBtnText}>Read aloud (run OCR)</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable onPress={() => setView('pdf')} style={[styles.emptyBtn, styles.emptyBtnGhost]}>
+                    <Text style={[styles.emptyBtnText, { color: colors.text }]}>Open PDF view</Text>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           }
@@ -395,8 +438,18 @@ const makeStyles = (c: Palette) =>
     toggleText: { fontFamily: tokens.fonts.body, fontSize: 13, fontWeight: '600', color: c.textDim },
     toggleTextOn: { color: c.onAccent },
     emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3 },
-    emptyBtn: { marginTop: tokens.space(5), backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radius },
+    emptyBtn: { backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radius },
+    emptyBtnGhost: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
     emptyBtnText: { fontFamily: tokens.fonts.body, color: c.onAccent, fontSize: 15, fontWeight: '600' },
+    ocrBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: tokens.space(4),
+      backgroundColor: c.accentSoft,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {
       color: c.text,

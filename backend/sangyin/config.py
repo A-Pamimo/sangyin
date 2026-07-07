@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # Reject uploads larger than this many megabytes.
     max_upload_mb: int = 50
 
+    # OCR for scanned / image-only PDFs (no extractable text). Runs in the
+    # background after import; Tesseract is used when available, else a pip-only
+    # fallback. Set ocr_enabled=false to disable entirely.
+    ocr_enabled: bool = True
+    ocr_max_pages: int = 50
+    ocr_dpi: int = 200
+
     # Storage / cache (documents + generated audio)
     data_dir: Path = Path.home() / ".sangyin"
 

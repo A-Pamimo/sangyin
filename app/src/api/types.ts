@@ -22,6 +22,8 @@ export interface DocumentT {
   created_at: string;
   /** True when the original PDF is stored and can be shown in the reader's PDF view. */
   has_pdf?: boolean;
+  /** Background OCR state for scanned PDFs: none | pending | done | failed | unavailable. */
+  ocr_status?: 'none' | 'pending' | 'done' | 'failed' | 'unavailable';
 }
 
 export interface DocumentSummary {

@@ -15,6 +15,11 @@ numpy>=1.24
 # --- Document parsing ---
 pypdf>=4.0            # PDF (BSD, permissive)
 pdfminer.six>=20221105  # PDF text fallback when pypdf can't read a file (MIT)
+pymupdf>=1.24         # Render PDF pages to images for OCR (AGPL/commercial)
+pytesseract>=0.3.10   # OCR via the Tesseract binary (install tesseract-ocr separately)
+Pillow>=10.0          # Image handling for OCR
+# Optional pip-only OCR fallback when Tesseract isn't installed (slow on CPU):
+#   pip install rapidocr-onnxruntime
 EbookLib>=0.18        # EPUB
 beautifulsoup4>=4.12  # EPUB HTML cleanup
 python-docx>=1.1      # DOCX

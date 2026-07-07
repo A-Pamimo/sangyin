@@ -110,6 +110,14 @@ export default function ReaderScreen() {
     }
   }, [doc, chapter, controller]);
 
+  // A PDF with no extractable text (scanned/image-based) has nothing to narrate —
+  // open straight to the PDF view instead of a blank text list.
+  useEffect(() => {
+    if (doc?.has_pdf && !doc.chapters.some((c) => c.sentences.length > 0)) {
+      setView('pdf');
+    }
+  }, [doc]);
+
   const startStreaming = useCallback(
     async (ch: Chapter, autoplay: boolean, startIndex?: number) => {
       if (!doc) return;
@@ -259,7 +267,22 @@ export default function ReaderScreen() {
           ref={listRef}
           data={chapter.sentences}
           keyExtractor={(s) => String(s.index)}
-          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220 }}
+          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220, flexGrow: 1 }}
+          ListEmptyComponent={
+            <View style={{ paddingVertical: tokens.space(10), alignItems: 'center' }}>
+              <Text style={styles.emptyTitle}>No readable text found</Text>
+              <Muted style={{ marginTop: 8, textAlign: 'center', maxWidth: 320 }}>
+                {doc.has_pdf
+                  ? 'This PDF looks scanned or image-based, so there’s nothing to narrate. You can still read the original in the PDF view.'
+                  : 'This document has no extractable text to read aloud.'}
+              </Muted>
+              {doc.has_pdf ? (
+                <Pressable onPress={() => setView('pdf')} style={styles.emptyBtn}>
+                  <Text style={styles.emptyBtnText}>Open PDF view</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          }
           onScrollToIndexFailed={({ index }) => {
             setTimeout(
               () => listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true }),
@@ -371,6 +394,9 @@ const makeStyles = (c: Palette) =>
     toggleBtnOn: { backgroundColor: c.accent },
     toggleText: { fontFamily: tokens.fonts.body, fontSize: 13, fontWeight: '600', color: c.textDim },
     toggleTextOn: { color: c.onAccent },
+    emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3 },
+    emptyBtn: { marginTop: tokens.space(5), backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radius },
+    emptyBtnText: { fontFamily: tokens.fonts.body, color: c.onAccent, fontSize: 15, fontWeight: '600' },
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {
       color: c.text,

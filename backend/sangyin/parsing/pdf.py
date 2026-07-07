@@ -29,6 +29,13 @@ def parse_pdf_bytes(content: bytes, title: str) -> Document:
         except Exception:
             pages.append("")
 
+    # pypdf can't read every PDF's text; fall back to pdfminer, which handles more
+    # font/encoding cases. (Truly image-only/scanned PDFs have no text either way.)
+    if sum(len(p) for p in pages) < 40:
+        mined = _pdfminer_pages(content, len(pages))
+        if mined:
+            pages = mined
+
     doc_title = meta_title or title
     chapters = _outline_chapters(reader, pages)
     if not chapters:
@@ -36,6 +43,26 @@ def parse_pdf_bytes(content: bytes, title: str) -> Document:
         chapters = [(doc_title, text)]
 
     return build_document(title=doc_title, source_type="pdf", raw_chapters=chapters)
+
+
+def _pdfminer_pages(content: bytes, n_pages: int) -> list[str] | None:
+    """Re-extract page text with pdfminer.six (more robust than pypdf on some PDFs).
+    Returns per-page text aligned to ``n_pages``, or None if nothing usable."""
+    try:
+        from pdfminer.high_level import extract_text
+    except Exception:
+        return None
+    try:
+        text = extract_text(io.BytesIO(content)) or ""
+    except Exception:
+        return None
+    if not text.strip():
+        return None
+    # pdfminer separates pages with a form-feed (\x0c).
+    pages = text.split("\x0c")
+    if n_pages and len(pages) > n_pages:
+        pages = pages[:n_pages]
+    return pages
 
 
 def _outline_chapters(reader, pages: list[str]) -> list[tuple[str, str]] | None:

@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator
 
 from fastapi import APIRouter, HTTPException
@@ -28,6 +31,7 @@ from ..parsing.base import segment_sentences, clean_text, group_sentences
 from ..storage import get_store
 from ..tts import encode_wav_bytes, get_engine
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tts", tags=["tts"])
 
 _NORM_RE = re.compile(r"[^a-z0-9]+")
@@ -126,6 +130,38 @@ def _resolve_sentences(req: TTSRequest) -> tuple[list[Sentence], str | None, str
     raise HTTPException(status_code=422, detail="Provide either document_id or text")
 
 
+def _render_group(engine, store, doc_id, chapter_id, voice, lang_code, group):
+    """Return (wav_bytes, sentence_spans, duration) for one phrase group, using the
+    cache when present and populating it (audio + timing sidecar) otherwise. Shared
+    by live streaming and background pre-generation."""
+    first_index = group[0].index
+    wav_bytes = None
+    sentence_spans = None
+    if doc_id and chapter_id:
+        wav_bytes = store.read_cached_chunk(doc_id, chapter_id, voice, first_index)
+        if wav_bytes is not None:
+            meta = store.read_cached_meta(doc_id, chapter_id, voice, first_index)
+            if meta:
+                sentence_spans = meta.get("sentences")
+
+    if wav_bytes is None:
+        text = " ".join(s.text.strip() for s in group if s.text.strip())
+        audio, words = _synthesize(engine, text, voice, lang_code)
+        wav_bytes = encode_wav_bytes(audio, engine.sample_rate)
+        total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
+        sentence_spans = _sentence_spans(group, words, total)
+        if doc_id and chapter_id:
+            store.write_cached_chunk(doc_id, chapter_id, voice, first_index, wav_bytes)
+            store.write_cached_meta(
+                doc_id, chapter_id, voice, first_index, {"sentences": sentence_spans}
+            )
+
+    total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
+    if sentence_spans is None:  # cache hit without a sidecar (older cache)
+        sentence_spans = _sentence_spans(group, [], total)
+    return wav_bytes, sentence_spans, total
+
+
 @router.post("/stream")
 def stream_tts(req: TTSRequest) -> StreamingResponse:
     settings = get_settings()
@@ -147,40 +183,13 @@ def stream_tts(req: TTSRequest) -> StreamingResponse:
 
     def generate() -> Iterator[str]:
         for group in groups:
-            text = " ".join(s.text.strip() for s in group if s.text.strip())
-            if not text:
+            if not any(s.text.strip() for s in group):
                 continue
-
-            first_index = group[0].index
-            wav_bytes: bytes | None = None
-            sentence_spans: list[dict] | None = None
-            # Reuse cached audio + timing when available (also powers offline playback).
-            # Keyed by the phrase's first sentence index.
-            if doc_id and chapter_id:
-                wav_bytes = store.read_cached_chunk(doc_id, chapter_id, voice, first_index)
-                if wav_bytes is not None:
-                    meta = store.read_cached_meta(doc_id, chapter_id, voice, first_index)
-                    if meta:
-                        sentence_spans = meta.get("sentences")
-
-            if wav_bytes is None:
-                audio, words = _synthesize(engine, text, voice, lang_code)
-                wav_bytes = encode_wav_bytes(audio, engine.sample_rate)
-                total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
-                sentence_spans = _sentence_spans(group, words, total)
-                if doc_id and chapter_id:
-                    store.write_cached_chunk(doc_id, chapter_id, voice, first_index, wav_bytes)
-                    store.write_cached_meta(
-                        doc_id, chapter_id, voice, first_index, {"sentences": sentence_spans}
-                    )
-
-            # Duration from PCM byte count: (bytes - 44 header) / 2 bytes-per-sample / rate.
-            total = max(0.0, (len(wav_bytes) - 44) / 2 / engine.sample_rate)
-            if sentence_spans is None:  # cache hit without a sidecar (older cache)
-                sentence_spans = _sentence_spans(group, [], total)
-
+            wav_bytes, sentence_spans, total = _render_group(
+                engine, store, doc_id, chapter_id, voice, lang_code, group
+            )
             payload = {
-                "index": first_index,
+                "index": group[0].index,
                 "sentences": sentence_spans,
                 "sample_rate": engine.sample_rate,
                 "duration_sec": round(total, 3),
@@ -189,3 +198,99 @@ def stream_tts(req: TTSRequest) -> StreamingResponse:
             yield json.dumps(payload) + "\n"
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
+# Background pre-generation: synthesize + cache a whole chapter up front, so slow
+# but natural engines (e.g. Chatterbox) play back smoothly from cache instead of
+# stalling live. Progress is tracked per (document, chapter, voice).
+# ---------------------------------------------------------------------------
+
+_pregen_exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pregen")
+_pregen: dict[str, dict] = {}
+_pregen_lock = threading.Lock()
+
+
+def _pregen_key(doc_id: str, chapter_id: str, voice: str) -> str:
+    return f"{doc_id}|{chapter_id or ''}|{voice}"
+
+
+def _groups_for(doc, chapter_id):
+    chapter = next((c for c in doc.chapters if c.id == chapter_id), None) if chapter_id else None
+    sentences = chapter.sentences if chapter else [s for c in doc.chapters for s in c.sentences]
+    return group_sentences(sentences)
+
+
+def _cached_count(store, doc_id, chapter_id, voice, groups) -> int:
+    if not chapter_id:
+        return 0
+    return sum(
+        1
+        for g in groups
+        if store.read_cached_chunk(doc_id, chapter_id, voice, g[0].index) is not None
+    )
+
+
+def _run_pregenerate(doc_id: str, chapter_id: str, voice: str, lang_code: str) -> None:
+    key = _pregen_key(doc_id, chapter_id, voice)
+    try:
+        engine = get_engine()
+        store = get_store()
+        doc = store.get(doc_id)
+        if doc is None:
+            with _pregen_lock:
+                _pregen[key] = {"total": 0, "done": 0, "status": "failed"}
+            return
+        groups = [g for g in _groups_for(doc, chapter_id) if any(s.text.strip() for s in g)]
+        with _pregen_lock:
+            _pregen[key] = {"total": len(groups), "done": 0, "status": "generating"}
+        for i, group in enumerate(groups):
+            try:
+                _render_group(engine, store, doc_id, chapter_id, voice, lang_code, group)
+            except Exception:
+                logger.exception("pre-generate failed for %s group %d", doc_id, i)
+            with _pregen_lock:
+                _pregen[key]["done"] = i + 1
+        with _pregen_lock:
+            _pregen[key]["status"] = "done"
+    except Exception:
+        logger.exception("pre-generate crashed for %s", doc_id)
+        with _pregen_lock:
+            _pregen.setdefault(key, {"total": 0, "done": 0})["status"] = "failed"
+
+
+@router.post("/pregenerate")
+def pregenerate(req: TTSRequest) -> dict:
+    settings = get_settings()
+    if not req.document_id:
+        raise HTTPException(status_code=422, detail="document_id is required")
+    voice = req.voice or settings.default_voice
+    lang_code = req.lang_code or settings.default_lang_code
+    key = _pregen_key(req.document_id, req.chapter_id or "", voice)
+    with _pregen_lock:
+        cur = _pregen.get(key)
+        if cur and cur["status"] == "generating":
+            return cur
+        _pregen[key] = {"total": 0, "done": 0, "status": "generating"}
+    _pregen_exec.submit(_run_pregenerate, req.document_id, req.chapter_id, voice, lang_code)
+    return _pregen[key]
+
+
+@router.get("/pregenerate/status")
+def pregenerate_status(document_id: str, chapter_id: str = "", voice: str = "") -> dict:
+    settings = get_settings()
+    store = get_store()
+    voice = voice or settings.default_voice
+    key = _pregen_key(document_id, chapter_id, voice)
+    with _pregen_lock:
+        state = _pregen.get(key)
+    if state and state["status"] == "generating":
+        return state
+    # No active job: report from the on-disk cache (survives restarts).
+    doc = store.get(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    groups = [g for g in _groups_for(doc, chapter_id) if any(s.text.strip() for s in g)]
+    done = _cached_count(store, document_id, chapter_id, voice, groups)
+    total = len(groups)
+    return {"total": total, "done": done, "status": "done" if total and done >= total else "idle"}

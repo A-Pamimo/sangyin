@@ -15,7 +15,7 @@ import {
 // the narrated text is the experience, so it's web/desktop only.
 const PDF_VIEW_ENABLED = Platform.OS === 'web';
 
-import { Chapter, DocumentT, Voice } from '../src/api/types';
+import { Chapter, DocumentT, PregenStatus, Voice } from '../src/api/types';
 import { PdfView } from '../src/components/PdfView';
 import { Muted } from '../src/components/ui';
 import { materialize } from '../src/player/offlineCache';
@@ -40,6 +40,7 @@ export default function ReaderScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showVoices, setShowVoices] = useState(false);
   const [view, setView] = useState<'text' | 'pdf'>('text');
+  const [pregen, setPregen] = useState<PregenStatus | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const startedChapterRef = useRef<string | null>(null);
@@ -145,6 +146,49 @@ export default function ReaderScreen() {
       setDoc({ ...doc, ocr_status: status as DocumentT['ocr_status'] });
     } catch (e: any) {
       setError(e?.message ?? 'Could not start OCR.');
+    }
+  };
+
+  // Pre-generation: check whether this chapter+voice is already cached, and poll
+  // while a background generation runs.
+  useEffect(() => {
+    if (!doc || !chapter) return;
+    let alive = true;
+    api
+      .pregenerateStatus(doc.id, chapter.id, voice)
+      .then((s) => alive && setPregen(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [doc, chapter, voice, api]);
+
+  useEffect(() => {
+    if (pregen?.status !== 'generating' || !doc || !chapter) return;
+    const iv = setInterval(async () => {
+      try {
+        const s = await api.pregenerateStatus(doc.id, chapter.id, voice);
+        setPregen(s);
+        if (s.status !== 'generating') clearInterval(iv);
+      } catch {
+        /* keep polling */
+      }
+    }, 2500);
+    return () => clearInterval(iv);
+  }, [pregen?.status, doc, chapter, voice, api]);
+
+  const preparePregen = async () => {
+    if (!doc || !chapter) return;
+    try {
+      const s = await api.pregenerate({
+        document_id: doc.id,
+        chapter_id: chapter.id,
+        voice,
+        lang_code: lang,
+      });
+      setPregen(s && s.status ? s : { total: 0, done: 0, status: 'generating' });
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not start pre-generation.');
     }
   };
 
@@ -371,6 +415,26 @@ export default function ReaderScreen() {
           </View>
         ) : null}
 
+        {pregen?.status === 'generating' ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <View style={{ marginLeft: 8, flex: 1 }}>
+              <Muted>
+                Preparing natural audio for this chapter…
+                {pregen.total ? ` ${Math.round((pregen.done / pregen.total) * 100)}%` : ''}
+              </Muted>
+              <View style={styles.pregenTrack}>
+                <View
+                  style={[
+                    styles.pregenFill,
+                    { width: `${pregen.total ? (pregen.done / pregen.total) * 100 : 5}%` },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         {showVoices && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
@@ -416,6 +480,15 @@ export default function ReaderScreen() {
               Voice: {voices.find((v) => v.id === voice)?.name ?? voice}
             </Text>
           </Pressable>
+          {pregen?.status === 'done' ? (
+            <View style={[styles.smallChip, { borderColor: colors.accent }]}>
+              <Text style={[styles.smallChipText, { color: colors.accent }]}>✓ Audio ready</Text>
+            </View>
+          ) : pregen && pregen.status !== 'generating' ? (
+            <Pressable onPress={preparePregen} style={styles.smallChip}>
+              <Text style={styles.smallChipText}>⬇ Prepare audio</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -486,6 +559,8 @@ const makeStyles = (c: Palette) =>
       borderRadius: tokens.radiusSm,
       backgroundColor: c.accentSoft,
     },
+    pregenTrack: { height: 4, borderRadius: 2, backgroundColor: c.surface, marginTop: 6, overflow: 'hidden' },
+    pregenFill: { height: 4, backgroundColor: c.accent },
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {
       color: c.text,

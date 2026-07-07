@@ -4,6 +4,7 @@ import {
   DocumentSummary,
   DocumentT,
   PdfHighlight,
+  PregenStatus,
   TTSRequestBody,
   Voice,
 } from './types';
@@ -69,6 +70,25 @@ export class ApiClient {
   async startOcr(id: string): Promise<{ status: string }> {
     const res = await fetch(this.url(`/documents/${id}/ocr`), { method: 'POST' });
     if (!res.ok) throw new ApiError(await this.errorDetail(res));
+    return res.json();
+  }
+
+  /** Start background pre-generation of a chapter's audio (for slow/premium voices). */
+  async pregenerate(body: TTSRequestBody): Promise<PregenStatus> {
+    const res = await fetch(this.url('/tts/pregenerate'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(await this.errorDetail(res));
+    return res.json();
+  }
+
+  /** Poll pre-generation progress for a (document, chapter, voice). */
+  async pregenerateStatus(documentId: string, chapterId: string, voice: string): Promise<PregenStatus> {
+    const q = new URLSearchParams({ document_id: documentId, chapter_id: chapterId, voice });
+    const res = await fetch(this.url(`/tts/pregenerate/status?${q.toString()}`));
+    if (!res.ok) throw new ApiError(`Pre-generation status failed (${res.status})`);
     return res.json();
   }
 

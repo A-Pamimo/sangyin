@@ -69,6 +69,13 @@ export interface PdfHighlight {
   rects: number[][];
 }
 
+/** Progress of background pre-generation for a (document, chapter, voice). */
+export interface PregenStatus {
+  total: number;
+  done: number;
+  status: 'idle' | 'generating' | 'done' | 'failed';
+}
+
 export interface TTSRequestBody {
   document_id?: string;
   chapter_id?: string;

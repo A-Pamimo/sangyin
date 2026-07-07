@@ -16,6 +16,9 @@ import soundfile as sf
 
 from ..models import Voice
 
+# The sidecar is on localhost — bypass any system HTTP proxy (which would 502 it).
+_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 class ChatterboxEngine:
     def __init__(self, base_url: str) -> None:
@@ -24,7 +27,7 @@ class ChatterboxEngine:
 
     def _fetch_sample_rate(self) -> int:
         try:
-            with urllib.request.urlopen(self.base_url + "/info", timeout=180) as r:
+            with _opener.open(self.base_url + "/info", timeout=180) as r:
                 return int(json.loads(r.read()).get("sample_rate", 24000))
         except Exception:
             return 24000
@@ -43,7 +46,7 @@ class ChatterboxEngine:
             data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=600) as r:
+        with _opener.open(req, timeout=600) as r:
             wav_bytes = r.read()
         arr, _sr = sf.read(io.BytesIO(wav_bytes), dtype="float32")
         if arr.ndim > 1:

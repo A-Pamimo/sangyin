@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     tts_engine: str = "kokoro"
     default_voice: str = "af_heart"
     default_lang_code: str = "a"
+    # Chatterbox (natural neural voice) runs as a separate GPU sidecar process;
+    # this is where the main backend reaches it. See backend/tts_sidecar.py.
+    chatterbox_url: str = "http://127.0.0.1:8091"
 
     # Hardening (all optional; safe defaults for personal self-host)
     # If set, every endpoint except /health requires this key via the X-API-Key header.

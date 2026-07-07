@@ -15,6 +15,9 @@ def get_engine() -> TTSEngine:
         from .kokoro_engine import KokoroEngine
 
         return KokoroEngine()
-    # Register additional engines here, e.g.:
-    #   if name == "chatterbox": from .chatterbox_engine import ChatterboxEngine; ...
+    if name == "chatterbox":
+        # Natural neural voice via the GPU sidecar (backend/tts_sidecar.py).
+        from .chatterbox_engine import ChatterboxEngine
+
+        return ChatterboxEngine(get_settings().chatterbox_url)
     raise ValueError(f"Unknown TTS engine: {name!r}")

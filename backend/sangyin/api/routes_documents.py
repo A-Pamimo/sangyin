@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from .. import ocr
+from .. import highlights, ocr
 from ..config import get_settings
 from ..models import Document, DocumentSummary, TextImportRequest, UrlImportRequest
 from ..parsing import parse_text, parse_upload, parse_url
@@ -145,3 +145,20 @@ def pdf_page_image(doc_id: str, page: int) -> Response:
         pm = d.load_page(page).get_pixmap(dpi=130, colorspace=fitz.csRGB, alpha=False)
         png = pm.tobytes("png")
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
+
+@router.get("/{doc_id}/pdf/highlights")
+def pdf_highlights(doc_id: str) -> dict:
+    """Per-sentence bounding boxes on the PDF pages, for on-page highlighting.
+    Uses stored OCR word boxes when present, else PyMuPDF word boxes."""
+    store = get_store()
+    doc = store.get(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    data = store.read_original_pdf(doc_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="No original file for this document")
+    sentences = [s for c in doc.chapters for s in c.sentences]
+    ocr_words = store.read_ocr_words(doc_id)
+    pages_words = ocr_words["pages"] if ocr_words else highlights.text_pdf_words(data)
+    return {"highlights": highlights.compute_highlights(sentences, pages_words)}

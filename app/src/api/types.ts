@@ -63,6 +63,12 @@ export interface AudioChunk {
   audio_b64: string;
 }
 
+/** A sentence's location on the PDF: its page and per-line rects (normalized 0-1). */
+export interface PdfHighlight {
+  page: number;
+  rects: number[][];
+}
+
 export interface TTSRequestBody {
   document_id?: string;
   chapter_id?: string;

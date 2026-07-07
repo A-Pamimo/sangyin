@@ -67,8 +67,9 @@ class DocumentStore:
             for f in doc_audio.rglob("*"):
                 if f.is_file():
                     f.unlink(missing_ok=True)
-        # Drop the stored original file, if any.
+        # Drop the stored original file + OCR word boxes, if any.
         self.original_pdf_path(doc_id).unlink(missing_ok=True)
+        self._ocr_words_path(doc_id).unlink(missing_ok=True)
         return existed
 
     # ---- original files (for the reader's PDF view) -------------------------
@@ -82,6 +83,22 @@ class DocumentStore:
     def read_original_pdf(self, doc_id: str) -> bytes | None:
         path = self.original_pdf_path(doc_id)
         return path.read_bytes() if path.exists() else None
+
+    # Per-page OCR word boxes (for on-page sentence highlighting of scanned PDFs).
+    def _ocr_words_path(self, doc_id: str) -> Path:
+        return self.originals_dir / f"{doc_id}.words.json"
+
+    def write_ocr_words(self, doc_id: str, data: dict) -> None:
+        self._ocr_words_path(doc_id).write_text(json.dumps(data), encoding="utf-8")
+
+    def read_ocr_words(self, doc_id: str) -> dict | None:
+        path = self._ocr_words_path(doc_id)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
 
     # ---- audio cache --------------------------------------------------------
 

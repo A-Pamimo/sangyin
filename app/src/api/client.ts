@@ -3,6 +3,7 @@ import {
   AudioChunk,
   DocumentSummary,
   DocumentT,
+  PdfHighlight,
   TTSRequestBody,
   Voice,
 } from './types';
@@ -55,6 +56,13 @@ export class ApiClient {
   /** Absolute URL of a single rendered PDF page image. */
   documentPageUrl(id: string, page: number): string {
     return this.url(`/documents/${id}/pdf/page/${page}`);
+  }
+
+  /** Per-sentence bounding boxes on the PDF pages, for on-page highlighting. */
+  async pdfHighlights(id: string): Promise<Record<number, PdfHighlight>> {
+    const res = await fetch(this.url(`/documents/${id}/pdf/highlights`));
+    if (!res.ok) throw new ApiError(`Could not load highlights (${res.status})`);
+    return (await res.json()).highlights ?? {};
   }
 
   /** Kick off (or retry) background OCR for a scanned PDF. */

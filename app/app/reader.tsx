@@ -3,12 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
+// The PDF view (rendered page images) is a large-screen convenience — on mobile
+// the narrated text is the experience, so it's web/desktop only.
+const PDF_VIEW_ENABLED = Platform.OS === 'web';
 
 import { Chapter, DocumentT, Voice } from '../src/api/types';
 import { PdfView } from '../src/components/PdfView';
@@ -111,9 +116,9 @@ export default function ReaderScreen() {
   }, [doc, chapter, controller]);
 
   // A PDF with no extractable text (scanned/image-based) has nothing to narrate —
-  // open straight to the PDF view instead of a blank text list.
+  // open straight to the PDF view instead of a blank text list (web only).
   useEffect(() => {
-    if (doc?.has_pdf && !doc.chapters.some((c) => c.sentences.length > 0)) {
+    if (PDF_VIEW_ENABLED && doc?.has_pdf && !doc.chapters.some((c) => c.sentences.length > 0)) {
       setView('pdf');
     }
   }, [doc]);
@@ -266,7 +271,7 @@ export default function ReaderScreen() {
           </ScrollView>
         )}
 
-        {doc.has_pdf && (
+        {doc.has_pdf && PDF_VIEW_ENABLED && (
           <View style={styles.viewToggle}>
             {(['text', 'pdf'] as const).map((v) => (
               <Pressable
@@ -292,9 +297,9 @@ export default function ReaderScreen() {
         </View>
       ) : null}
 
-      {view === 'pdf' && doc.has_pdf ? (
+      {PDF_VIEW_ENABLED && view === 'pdf' && doc.has_pdf ? (
         <View style={{ flex: 1, backgroundColor: colors.surfaceAlt }}>
-          <PdfView id={doc.id} />
+          <PdfView id={doc.id} activeIndex={state.currentIndex} />
         </View>
       ) : (
         <FlatList
@@ -319,9 +324,11 @@ export default function ReaderScreen() {
                       <Text style={styles.emptyBtnText}>Read aloud (run OCR)</Text>
                     </Pressable>
                   ) : null}
-                  <Pressable onPress={() => setView('pdf')} style={[styles.emptyBtn, styles.emptyBtnGhost]}>
-                    <Text style={[styles.emptyBtnText, { color: colors.text }]}>Open PDF view</Text>
-                  </Pressable>
+                  {PDF_VIEW_ENABLED ? (
+                    <Pressable onPress={() => setView('pdf')} style={[styles.emptyBtn, styles.emptyBtnGhost]}>
+                      <Text style={[styles.emptyBtnText, { color: colors.text }]}>Open PDF view</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>

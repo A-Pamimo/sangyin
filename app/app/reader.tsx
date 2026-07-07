@@ -182,6 +182,7 @@ export default function ReaderScreen() {
         if (!ac.signal.aborted) {
           setError(e?.message ?? 'Synthesis failed.');
           startedChapterRef.current = null;
+          controller.pause(); // stop the "preparing" spinner on failure
         }
       }
     },
@@ -243,6 +244,12 @@ export default function ReaderScreen() {
       </View>
     );
   }
+
+  // Audio isn't playing yet even though the user wants it: either the first clip
+  // is still synthesizing (loadedCount 0 — includes the voice model booting on
+  // the very first request) or playback ran out mid-stream (buffering).
+  const loadingAudio = !error && state.playing && (state.buffering || state.loadedCount === 0);
+  const warmingUp = loadingAudio && state.loadedCount === 0;
 
   return (
     <View style={styles.container}>
@@ -353,6 +360,17 @@ export default function ReaderScreen() {
       <View style={styles.dock}>
         {error ? <Muted style={{ color: colors.danger, marginBottom: 8 }}>{error}</Muted> : null}
 
+        {loadingAudio ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <Muted style={{ marginLeft: 8, flex: 1 }}>
+              {warmingUp
+                ? 'Preparing audio… the first play can take a few seconds while the voice warms up.'
+                : 'Buffering the next part…'}
+            </Muted>
+          </View>
+        ) : null}
+
         {showVoices && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
             <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
@@ -374,9 +392,11 @@ export default function ReaderScreen() {
         <View style={styles.transport}>
           <TransportButton label="⏮" onPress={() => controller.prev()} color={colors.text} />
           <Pressable onPress={onPlayPause} style={styles.playBtn}>
-            <Text style={styles.playIcon}>
-              {state.buffering ? '…' : state.playing ? '❚❚' : '▶'}
-            </Text>
+            {loadingAudio ? (
+              <ActivityIndicator color={colors.onAccent} />
+            ) : (
+              <Text style={styles.playIcon}>{state.playing ? '❚❚' : '▶'}</Text>
+            )}
           </Pressable>
           <TransportButton label="⏭" onPress={() => controller.next()} color={colors.text} />
         </View>
@@ -456,6 +476,15 @@ const makeStyles = (c: Palette) =>
       backgroundColor: c.accentSoft,
       borderBottomWidth: 1,
       borderBottomColor: c.border,
+    },
+    loadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: tokens.radiusSm,
+      backgroundColor: c.accentSoft,
     },
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {

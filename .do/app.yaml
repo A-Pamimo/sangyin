@@ -33,5 +33,9 @@ services:
     envs:
       - key: SANGYIN_CORS_ORIGINS
         value: "*"
+      # Natural voice: Chatterbox on Modal's serverless GPU (scales to zero).
       - key: SANGYIN_TTS_ENGINE
-        value: kokoro
+        value: chatterbox
+      - key: SANGYIN_CHATTERBOX_URL
+        value: https://a-pamimo--sangyin-chatterbox-web.modal.run
+      # (Set kokoro instead to fall back to the fast local CPU voice.)

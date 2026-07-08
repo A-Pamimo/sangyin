@@ -458,6 +458,13 @@ export default function ReaderScreen() {
           </View>
         ) : null}
 
+        {isNatural && pregen?.status === 'failed' ? (
+          <Muted style={{ color: colors.danger, marginBottom: 8 }}>
+            The natural voice is unavailable right now (GPU spend limit). Your free voices still
+            work — pick one above, or try again later.
+          </Muted>
+        ) : null}
+
         {pregen?.status === 'generating' ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.accent} />
@@ -535,7 +542,11 @@ export default function ReaderScreen() {
             </View>
           ) : isNatural && pregen && pregen.status !== 'generating' ? (
             <Pressable onPress={preparePregen} style={styles.smallChip}>
-              <Text style={styles.smallChipText}>⬇ Prepare natural{pregen.status === 'partial' ? ' (resume)' : ''}</Text>
+              <Text style={styles.smallChipText}>
+                {pregen.status === 'failed'
+                  ? '⚠ Retry natural'
+                  : `⬇ Prepare natural${pregen.status === 'partial' ? ' (resume)' : ''}`}
+              </Text>
             </Pressable>
           ) : null}
         </View>

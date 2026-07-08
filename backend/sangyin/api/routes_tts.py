@@ -290,16 +290,24 @@ def _run_pregenerate(doc_id: str, chapter_id: str, voice: str, lang_code: str) -
         with _pregen_lock:
             _pregen[key] = {"total": len(groups), "done": 0, "status": "generating"}
 
+        errors = 0
+
         def render_one(group) -> None:
+            nonlocal errors
+            ok = True
             try:
                 _render_group(engine, store, doc_id, chapter_id, voice, lang_code, group)
             except Exception:
                 logger.exception("pre-generate failed for %s group %s", doc_id, group[0].index)
+                ok = False
             with _pregen_lock:
-                _pregen[key]["done"] += 1
+                if ok:
+                    _pregen[key]["done"] += 1
+                else:
+                    errors += 1
 
-        # Render phrases in parallel: a serverless GPU fans out to one container per
-        # request, so a chapter caches in a fraction of the serial wall-clock.
+        # One phrase at a time by default (pregen_concurrency=1) so a paid GPU can't
+        # fan out into several billed containers from a single prepare.
         concurrency = max(1, get_settings().pregen_concurrency)
         if concurrency == 1 or len(groups) <= 1:
             for g in groups:
@@ -308,8 +316,17 @@ def _run_pregenerate(doc_id: str, chapter_id: str, voice: str, lang_code: str) -
             with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="pregen-w") as pool:
                 list(pool.map(render_one, groups))
 
+        # Report the true outcome: done only if everything cached; failed if any phrase
+        # errored (e.g. the GPU is unavailable / spend-capped); else partial.
         with _pregen_lock:
-            _pregen[key]["status"] = "done"
+            done = _cached_count(store, doc_id, chapter_id, voice, groups)
+            _pregen[key]["done"] = done
+            if done >= len(groups) and len(groups) > 0:
+                _pregen[key]["status"] = "done"
+            elif errors:
+                _pregen[key]["status"] = "failed"
+            else:
+                _pregen[key]["status"] = "partial"
     except Exception:
         logger.exception("pre-generate crashed for %s", doc_id)
         with _pregen_lock:
@@ -372,4 +389,9 @@ def pregenerate_status(document_id: str, chapter_id: str = "", voice: str = "") 
     if state and state["status"] == "generating":
         return state
     # No active job: report from the on-disk cache (survives restarts / redeploys).
-    return _cache_status(store, document_id, chapter_id, voice)
+    cache = _cache_status(store, document_id, chapter_id, voice)
+    # Surface a failed job (e.g. the GPU is unavailable / spend-capped) so the client
+    # can show a clear message instead of silently offering "prepare" again.
+    if cache["status"] != "done" and state and state.get("status") == "failed":
+        return {**cache, "status": "failed"}
+    return cache

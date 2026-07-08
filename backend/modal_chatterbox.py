@@ -45,14 +45,31 @@ def web():
     import numpy as np
     import soundfile as sf
     import torch
-    from fastapi import FastAPI, Response
-    from pydantic import BaseModel
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse, Response
+    from starlette.routing import Route
 
-    fapp = FastAPI(title="Chatterbox (Modal)")
+    # We use Starlette directly instead of FastAPI: chatterbox-tts pins an older
+    # pydantic than fastapi wants, and the clash breaks FastAPI's request-parameter
+    # detection (it mis-reads the request body as a missing query field → HTTP 422).
+    # Starlette has no such layer — the handler always just receives the request.
     _state: dict = {}
 
     def model():
         if "m" not in _state:
+            # Chatterbox instantiates perth.PerthImplicitWatermarker() at init. That
+            # class imports as None in this image (a missing perth sub-dependency),
+            # which crashes model load. We don't need the watermark, so stub it with
+            # a pass-through before importing Chatterbox.
+            import perth
+
+            if getattr(perth, "PerthImplicitWatermarker", None) is None:
+                class _NoopWatermarker:
+                    def apply_watermark(self, wav, sample_rate=None, **kwargs):
+                        return wav
+
+                perth.PerthImplicitWatermarker = _NoopWatermarker
+
             from chatterbox.tts import ChatterboxTTS
 
             _state["m"] = ChatterboxTTS.from_pretrained(
@@ -60,36 +77,34 @@ def web():
             )
         return _state["m"]
 
-    class SynthRequest(BaseModel):
-        text: str
-        exaggeration: float = 0.5
-        cfg_weight: float = 0.5
-        temperature: float = 0.8
+    async def health(request):
+        return JSONResponse({"status": "ok", "cuda": torch.cuda.is_available()})
 
-    @fapp.get("/health")
-    def health() -> dict:
-        return {"status": "ok", "cuda": torch.cuda.is_available()}
+    async def info(request):
+        return JSONResponse({"sample_rate": int(model().sr)})
 
-    @fapp.get("/info")
-    def info() -> dict:
-        return {"sample_rate": int(model().sr)}
-
-    @fapp.post("/synthesize")
-    def synthesize(req: SynthRequest) -> Response:
-        m = model()
-        text = req.text.strip()
+    async def synthesize(request):
+        body = await request.json()
+        text = str(body.get("text", "")).strip()
         if not text:
             return Response(content=b"", media_type="audio/wav")
+        m = model()
         with torch.inference_mode():
             wav = m.generate(
                 text,
-                exaggeration=req.exaggeration,
-                cfg_weight=req.cfg_weight,
-                temperature=req.temperature,
+                exaggeration=float(body.get("exaggeration", 0.5)),
+                cfg_weight=float(body.get("cfg_weight", 0.5)),
+                temperature=float(body.get("temperature", 0.8)),
             )
         arr = wav.squeeze().detach().cpu().numpy().astype(np.float32)
         buf = io.BytesIO()
         sf.write(buf, arr, int(m.sr), format="WAV", subtype="FLOAT")
         return Response(content=buf.getvalue(), media_type="audio/wav")
 
-    return fapp
+    return Starlette(
+        routes=[
+            Route("/health", health),
+            Route("/info", info),
+            Route("/synthesize", synthesize, methods=["POST"]),
+        ]
+    )

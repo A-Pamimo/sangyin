@@ -61,6 +61,9 @@ export interface AudioChunk {
   sample_rate: number;
   duration_sec: number;
   audio_b64: string;
+  // Terminal marker on the natural-voice stream: some phrases aren't cached yet, so
+  // the client should run "prepare". Present only on the marker line (no audio).
+  needs_prepare?: boolean;
 }
 
 /** A sentence's location on the PDF: its page and per-line rects (normalized 0-1). */
@@ -73,7 +76,7 @@ export interface PdfHighlight {
 export interface PregenStatus {
   total: number;
   done: number;
-  status: 'idle' | 'generating' | 'done' | 'failed';
+  status: 'idle' | 'partial' | 'generating' | 'done' | 'failed';
 }
 
 export interface TTSRequestBody {

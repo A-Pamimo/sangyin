@@ -21,6 +21,7 @@ import { Muted } from '../src/components/ui';
 import { materialize } from '../src/player/offlineCache';
 import { useMediaSession } from '../src/player/useMediaSession';
 import { usePlayer } from '../src/player/usePlayer';
+import { NATURAL_VOICE_ID } from '../src/config';
 import { useApi, useAppStore } from '../src/store/appStore';
 import { Palette, tokens, useTheme } from '../src/theme';
 
@@ -47,6 +48,9 @@ export default function ReaderScreen() {
   const listRef = useRef<FlatList>(null);
 
   const chapter: Chapter | undefined = doc?.chapters[chapterIndex];
+  // The natural voice plays only from cache; selecting it makes Play "prepare first".
+  const isNatural = voice === NATURAL_VOICE_ID;
+  const naturalReady = !isNatural || pregen?.status === 'done';
 
   // Load document + voices, restore saved chapter.
   useEffect(() => {
@@ -67,7 +71,15 @@ export default function ReaderScreen() {
       }
       api
         .voices()
-        .then((v) => alive && setVoices(v))
+        .then((v) => {
+          if (!alive) return;
+          setVoices(v);
+          // Self-correct a persisted voice the backend no longer offers, so we never
+          // send a dead voice id (which the engine would ignore or mis-cache).
+          if (v.length && !v.some((x) => x.id === voice)) {
+            setVoice(v[0].id, v[0].lang_code);
+          }
+        })
         .catch(() => {});
     })();
     return () => {
@@ -130,7 +142,13 @@ export default function ReaderScreen() {
     const iv = setInterval(async () => {
       try {
         const d = await api.getDocument(id);
-        setDoc(d);
+        // Only replace `doc` when something actually changed, so we don't churn its
+        // object identity every 4s (which would needlessly re-run doc-keyed effects).
+        setDoc((prev) => {
+          const count = (x: DocumentT) => x.chapters.reduce((n, c) => n + c.sentences.length, 0);
+          if (prev && prev.ocr_status === d.ocr_status && count(prev) === count(d)) return prev;
+          return d;
+        });
         if (d.ocr_status !== 'pending') clearInterval(iv);
       } catch {
         /* keep polling */
@@ -149,37 +167,32 @@ export default function ReaderScreen() {
     }
   };
 
-  // Pre-generation: check whether this chapter+voice is already cached, and poll
-  // while a background generation runs.
+  // Pre-generation status: read-only. Generation is triggered *only* by an explicit
+  // action (the Play/Prepare button), never automatically — auto-triggering here is
+  // what caused a runaway GPU-spend loop. Keyed on stable ids so the OCR poll swapping
+  // the `doc` object can't re-fire it.
   useEffect(() => {
-    if (!doc || !chapter) return;
+    const docId = doc?.id;
+    const chapterId = chapter?.id;
+    if (!docId || !chapterId) return;
     let alive = true;
     api
-      .pregenerateStatus(doc.id, chapter.id, voice)
-      .then((s) => {
-        if (!alive) return;
-        setPregen(s);
-        // Auto-start caching the moment a chapter is opened so playback is smooth
-        // instead of synthesizing each phrase live on a slow neural voice. `idle`
-        // means nothing (or only part) is cached and no job is already running.
-        if (s.status === 'idle') {
-          api
-            .pregenerate({ document_id: doc.id, chapter_id: chapter.id, voice, lang_code: lang })
-            .then((r) => alive && r?.status && setPregen(r))
-            .catch(() => {});
-        }
-      })
+      .pregenerateStatus(docId, chapterId, voice)
+      .then((s) => alive && setPregen(s))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [doc, chapter, voice, lang, api]);
+  }, [doc?.id, chapter?.id, voice, api]);
 
+  // While a prepare job runs, poll its progress.
   useEffect(() => {
-    if (pregen?.status !== 'generating' || !doc || !chapter) return;
+    const docId = doc?.id;
+    const chapterId = chapter?.id;
+    if (pregen?.status !== 'generating' || !docId || !chapterId) return;
     const iv = setInterval(async () => {
       try {
-        const s = await api.pregenerateStatus(doc.id, chapter.id, voice);
+        const s = await api.pregenerateStatus(docId, chapterId, voice);
         setPregen(s);
         if (s.status !== 'generating') clearInterval(iv);
       } catch {
@@ -187,7 +200,7 @@ export default function ReaderScreen() {
       }
     }, 2500);
     return () => clearInterval(iv);
-  }, [pregen?.status, doc, chapter, voice, api]);
+  }, [pregen?.status, doc?.id, chapter?.id, voice, api]);
 
   const preparePregen = async () => {
     if (!doc || !chapter) return;
@@ -221,6 +234,12 @@ export default function ReaderScreen() {
           ac.signal,
         )) {
           if (ac.signal.aborted) return;
+          if (chunk.needs_prepare) {
+            // Natural voice: uncached phrases remain — kick off (or resume) prepare.
+            controller.pause();
+            preparePregen();
+            continue;
+          }
           const uri = await materialize(chunk, { docId: doc.id, chapterId: ch.id, voice });
           controller.addChunk({
             index: chunk.index,
@@ -254,6 +273,12 @@ export default function ReaderScreen() {
 
   const onPlayPause = () => {
     if (!chapter) return;
+    // Natural voice must be prepared (cached) once before it can play — Play triggers
+    // that one-time GPU pass instead of a live stream.
+    if (isNatural && !naturalReady) {
+      if (pregen?.status !== 'generating') preparePregen();
+      return;
+    }
     if (startedChapterRef.current !== chapter.id) {
       startStreaming(chapter, true, resumeIndexFor(chapter));
     } else {
@@ -263,6 +288,10 @@ export default function ReaderScreen() {
 
   const onTapSentence = (sentenceIndex: number) => {
     if (!chapter) return;
+    if (isNatural && !naturalReady) {
+      if (pregen?.status !== 'generating') preparePregen();
+      return;
+    }
     // Start (or restart) the stream from the tapped sentence. Cached audio makes
     // re-taps cheap, and this works whether or not that sentence is loaded yet.
     startStreaming(chapter, true, sentenceIndex);
@@ -278,7 +307,9 @@ export default function ReaderScreen() {
   const onSelectVoice = (v: Voice) => {
     setVoice(v.id, v.lang_code);
     setShowVoices(false);
-    if (chapter && startedChapterRef.current === chapter.id) {
+    // Don't auto-stream when switching to the natural voice — it needs preparing first
+    // (the status effect will refresh, and Play will offer "Prepare").
+    if (v.id !== NATURAL_VOICE_ID && chapter && startedChapterRef.current === chapter.id) {
       // Re-synthesize from the current sentence in the new voice, preserving place.
       const from = state.currentIndex >= 0 ? state.currentIndex : resumeIndexFor(chapter);
       startStreaming(chapter, state.playing, from);
@@ -432,7 +463,9 @@ export default function ReaderScreen() {
             <ActivityIndicator size="small" color={colors.accent} />
             <View style={{ marginLeft: 8, flex: 1 }}>
               <Muted>
-                Caching this chapter for smooth playback… you can press play any time.
+                {isNatural
+                  ? 'Preparing the natural voice for this chapter — a one-time step, then it plays instantly.'
+                  : 'Caching this chapter for smooth playback…'}
                 {pregen.total ? ` ${Math.round((pregen.done / pregen.total) * 100)}%` : ''}
               </Muted>
               <View style={styles.pregenTrack}>
@@ -468,8 +501,11 @@ export default function ReaderScreen() {
         <View style={styles.transport}>
           <TransportButton label="⏮" onPress={() => controller.prev()} color={colors.text} />
           <Pressable onPress={onPlayPause} style={styles.playBtn}>
-            {loadingAudio ? (
+            {loadingAudio || (isNatural && pregen?.status === 'generating') ? (
               <ActivityIndicator color={colors.onAccent} />
+            ) : isNatural && !naturalReady ? (
+              // Prepare-first: this tap runs the one-time GPU pass, not live playback.
+              <Text style={styles.playIcon}>⬇</Text>
             ) : (
               <Text style={styles.playIcon}>{state.playing ? '❚❚' : '▶'}</Text>
             )}
@@ -492,13 +528,14 @@ export default function ReaderScreen() {
               Voice: {voices.find((v) => v.id === voice)?.name ?? voice}
             </Text>
           </Pressable>
-          {pregen?.status === 'done' ? (
+          {/* Prepare affordance only for the natural (GPU) voice — Kokoro plays live. */}
+          {isNatural && pregen?.status === 'done' ? (
             <View style={[styles.smallChip, { borderColor: colors.accent }]}>
-              <Text style={[styles.smallChipText, { color: colors.accent }]}>✓ Audio ready</Text>
+              <Text style={[styles.smallChipText, { color: colors.accent }]}>✓ Natural ready</Text>
             </View>
-          ) : pregen && pregen.status !== 'generating' ? (
+          ) : isNatural && pregen && pregen.status !== 'generating' ? (
             <Pressable onPress={preparePregen} style={styles.smallChip}>
-              <Text style={styles.smallChipText}>⬇ Prepare audio</Text>
+              <Text style={styles.smallChipText}>⬇ Prepare natural{pregen.status === 'partial' ? ' (resume)' : ''}</Text>
             </Pressable>
           ) : null}
         </View>

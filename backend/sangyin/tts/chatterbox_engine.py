@@ -23,7 +23,16 @@ _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 class ChatterboxEngine:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
-        self.sample_rate = self._fetch_sample_rate()
+        self._sample_rate: int | None = None
+
+    @property
+    def sample_rate(self) -> int:
+        # Lazy: fetching /info wakes the GPU worker, so only do it when we're actually
+        # about to synthesize — never just to construct the engine, list voices, or
+        # serve an already-cached clip.
+        if self._sample_rate is None:
+            self._sample_rate = self._fetch_sample_rate()
+        return self._sample_rate
 
     def _fetch_sample_rate(self) -> int:
         try:

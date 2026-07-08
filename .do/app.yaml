@@ -33,12 +33,14 @@ services:
     envs:
       - key: SANGYIN_CORS_ORIGINS
         value: "*"
-      # Natural voice: Chatterbox on Modal's serverless GPU (scales to zero).
+      # Default engine = Kokoro (CPU, free, live). The natural voice (Chatterbox on
+      # Modal's serverless GPU) is opt-in: a request for the `natural` voice routes to
+      # the GPU, and only via explicit per-chapter pre-generation — never live — so the
+      # GPU runs only when the user asks and then plays from cache.
       - key: SANGYIN_TTS_ENGINE
-        value: chatterbox
+        value: kokoro
       - key: SANGYIN_CHATTERBOX_URL
         value: https://a-pamimo--sangyin-chatterbox-web.modal.run
-      # (Set kokoro instead to fall back to the fast local CPU voice.)
       # Persistent storage: DigitalOcean Spaces (S3-compatible). App Platform's disk
       # is ephemeral, so documents + cached audio live here instead. The two secret
       # keys are set as ENCRYPTED env vars on the app (not committed to git); mint with:

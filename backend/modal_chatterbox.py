@@ -35,13 +35,13 @@ hf_cache = modal.Volume.from_name("sangyin-hf-cache", create_if_missing=True)
 @app.function(
     gpu="L4",  # 24 GB, cheap; Chatterbox (~0.5B) fits with room to spare
     volumes={"/root/.cache/huggingface": hf_cache},
-    # Stay warm 20 min after the last request so a listening session doesn't keep
-    # re-paying the cold start; still scales to zero when genuinely idle.
-    scaledown_window=1200,
+    # Scale to zero quickly after a prepare finishes — the whole point is that the GPU
+    # only bills while actively generating, not for a long idle tail.
+    scaledown_window=60,
     timeout=600,
-    # Allow several containers so parallel pre-generation (SANGYIN_PREGEN_CONCURRENCY)
-    # actually fans out instead of queueing on one GPU.
-    max_containers=6,
+    # Cap parallelism: pre-generation runs one phrase at a time, so a single warm
+    # container is enough and a stray burst can't light up a fleet of billed GPUs.
+    max_containers=2,
 )
 @modal.asgi_app()
 def web():

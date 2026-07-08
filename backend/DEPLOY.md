@@ -11,9 +11,28 @@ The backend splits into two workloads, hosted separately to keep cost down:
 Because audio is **pre-generated and cached**, the GPU only runs during generation
 and scales to zero — you pay ~ generation time, not 24/7.
 
-## 1. Audio + document storage → Cloudflare R2 (free tier, free egress)
+## 1. Audio + document storage → S3-compatible object storage
 
-Create an R2 bucket + an API token, then set on the **API** service:
+App Platform's disk is **ephemeral**, so documents + cached audio must live in
+object storage. Any S3-compatible bucket works. Pick one:
+
+**Option A — DigitalOcean Spaces** (stays in DO, covered by the student credit).
+Create the key and bucket from the CLI, then set the env vars:
+
+```
+doctl spaces keys create sangyin-backend --grants 'bucket=;permission=fullaccess'
+# create the bucket once (any S3 client), e.g. python:
+#   boto3.client("s3", endpoint_url="https://nyc3.digitaloceanspaces.com", ...).create_bucket(Bucket="sangyin")
+
+SANGYIN_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+SANGYIN_S3_REGION=nyc3
+SANGYIN_S3_BUCKET=sangyin
+SANGYIN_S3_ACCESS_KEY=...      # set as an ENCRYPTED app env var
+SANGYIN_S3_SECRET_KEY=...      # set as an ENCRYPTED app env var
+```
+
+**Option B — Cloudflare R2** (free egress, which matters when streaming a lot of
+audio; needs a Cloudflare account). Create an R2 bucket + S3 API token, then:
 
 ```
 SANGYIN_R2_ACCOUNT_ID=...
@@ -22,8 +41,8 @@ SANGYIN_R2_SECRET_KEY=...
 SANGYIN_R2_BUCKET=sangyin
 ```
 
-With those set, all blobs go to R2; unset, it uses local files under `data_dir`.
-R2's free egress matters — the API streams a lot of audio to phones.
+The generic `SANGYIN_S3_*` vars take priority over `SANGYIN_R2_*`; with neither set,
+blobs fall back to local files under `data_dir`.
 
 ## 2. GPU worker → Modal (serverless; free monthly credits)
 

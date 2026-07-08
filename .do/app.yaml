@@ -1,23 +1,31 @@
-# DigitalOcean App Platform spec. Deploy with:
-#   doctl apps create --spec .do/app.yaml
-# or in the DO dashboard: Apps -> Create -> point at this repo (it detects the
-# Dockerfile). Fill the SECRET values in the dashboard, don't commit them.
+# DigitalOcean App Platform spec.
 #
-# App Platform has an ephemeral filesystem, so R2 (below) is required in the cloud —
-# local disk won't persist between deploys/restarts.
+# As written this deploys a WORKING API out of the box: fast Kokoro voice on CPU,
+# ephemeral local storage. Create it with:
+#   doctl apps create --spec .do/app.yaml
+# (or dashboard: Create App -> this repo -> it uses this spec).
+#
+# Then upgrade with env vars (dashboard, or `doctl apps update <id> --spec ...`):
+#   Natural voice  -> deploy backend/modal_chatterbox.py, then set
+#                     SANGYIN_TTS_ENGINE=chatterbox
+#                     SANGYIN_CHATTERBOX_URL=https://<you>--sangyin-chatterbox-web.modal.run
+#   Persistent R2  -> App Platform disk is ephemeral, so for real use set
+#                     SANGYIN_R2_ACCOUNT_ID / SANGYIN_R2_BUCKET /
+#                     SANGYIN_R2_ACCESS_KEY / SANGYIN_R2_SECRET_KEY (keys as SECRET)
 name: sangyin-backend
 region: nyc
 services:
   - name: api
     source_dir: backend
-    dockerfile_path: backend/Dockerfile
+    dockerfile_path: backend/Dockerfile  # forces a Docker build, not the Python buildpack
     github:
       repo: A-Pamimo/sangyin
       branch: claude/ios-eas-setup
       deploy_on_push: true
     http_port: 8080
-    # 2 GB covers Kokoro-on-CPU; if you only use Chatterbox (via Modal) a 1 GB
-    # instance is enough. Adjust the slug in the dashboard if this one is stale.
+    # Kokoro needs ~2 GB. If doctl rejects this slug, run
+    #   doctl apps tier instance-size list
+    # and pick a ~2 GB one.
     instance_size_slug: apps-s-1vcpu-2gb
     instance_count: 1
     health_check:
@@ -25,21 +33,5 @@ services:
     envs:
       - key: SANGYIN_CORS_ORIGINS
         value: "*"
-      # --- Voice: Chatterbox on Modal (or set to "kokoro" for the free CPU voice) ---
       - key: SANGYIN_TTS_ENGINE
-        value: chatterbox
-      - key: SANGYIN_CHATTERBOX_URL
-        value: https://REPLACE--sangyin-chatterbox-web.modal.run
-      # --- Storage: Cloudflare R2 (required — App Platform disk is ephemeral) ---
-      - key: SANGYIN_R2_ACCOUNT_ID
-        value: REPLACE
-      - key: SANGYIN_R2_BUCKET
-        value: sangyin
-      - key: SANGYIN_R2_ACCESS_KEY
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DASHBOARD
-      - key: SANGYIN_R2_SECRET_KEY
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DASHBOARD
+        value: kokoro

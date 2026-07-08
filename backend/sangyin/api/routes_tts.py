@@ -244,13 +244,25 @@ def _run_pregenerate(doc_id: str, chapter_id: str, voice: str, lang_code: str) -
         groups = [g for g in _groups_for(doc, chapter_id) if any(s.text.strip() for s in g)]
         with _pregen_lock:
             _pregen[key] = {"total": len(groups), "done": 0, "status": "generating"}
-        for i, group in enumerate(groups):
+
+        def render_one(group) -> None:
             try:
                 _render_group(engine, store, doc_id, chapter_id, voice, lang_code, group)
             except Exception:
-                logger.exception("pre-generate failed for %s group %d", doc_id, i)
+                logger.exception("pre-generate failed for %s group %s", doc_id, group[0].index)
             with _pregen_lock:
-                _pregen[key]["done"] = i + 1
+                _pregen[key]["done"] += 1
+
+        # Render phrases in parallel: a serverless GPU fans out to one container per
+        # request, so a chapter caches in a fraction of the serial wall-clock.
+        concurrency = max(1, get_settings().pregen_concurrency)
+        if concurrency == 1 or len(groups) <= 1:
+            for g in groups:
+                render_one(g)
+        else:
+            with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="pregen-w") as pool:
+                list(pool.map(render_one, groups))
+
         with _pregen_lock:
             _pregen[key]["status"] = "done"
     except Exception:

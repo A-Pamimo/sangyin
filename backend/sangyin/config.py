@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Chatterbox (natural neural voice) runs as a separate GPU sidecar process;
     # this is where the main backend reaches it. See backend/tts_sidecar.py.
     chatterbox_url: str = "http://127.0.0.1:8091"
+    # How many phrases to pre-generate in parallel. A serverless GPU (Modal) scales
+    # to one container per concurrent request, so this caches a chapter ~N× faster.
+    pregen_concurrency: int = 4
 
     # Hardening (all optional; safe defaults for personal self-host)
     # If set, every endpoint except /health requires this key via the X-API-Key header.

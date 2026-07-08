@@ -156,12 +156,24 @@ export default function ReaderScreen() {
     let alive = true;
     api
       .pregenerateStatus(doc.id, chapter.id, voice)
-      .then((s) => alive && setPregen(s))
+      .then((s) => {
+        if (!alive) return;
+        setPregen(s);
+        // Auto-start caching the moment a chapter is opened so playback is smooth
+        // instead of synthesizing each phrase live on a slow neural voice. `idle`
+        // means nothing (or only part) is cached and no job is already running.
+        if (s.status === 'idle') {
+          api
+            .pregenerate({ document_id: doc.id, chapter_id: chapter.id, voice, lang_code: lang })
+            .then((r) => alive && r?.status && setPregen(r))
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [doc, chapter, voice, api]);
+  }, [doc, chapter, voice, lang, api]);
 
   useEffect(() => {
     if (pregen?.status !== 'generating' || !doc || !chapter) return;
@@ -409,7 +421,7 @@ export default function ReaderScreen() {
             <ActivityIndicator size="small" color={colors.accent} />
             <Muted style={{ marginLeft: 8, flex: 1 }}>
               {warmingUp
-                ? 'Preparing audio… the first play can take a few seconds while the voice warms up.'
+                ? 'Warming up the natural voice — the first play can take up to a minute, then it’s quick.'
                 : 'Buffering the next part…'}
             </Muted>
           </View>
@@ -420,7 +432,7 @@ export default function ReaderScreen() {
             <ActivityIndicator size="small" color={colors.accent} />
             <View style={{ marginLeft: 8, flex: 1 }}>
               <Muted>
-                Preparing natural audio for this chapter…
+                Caching this chapter for smooth playback… you can press play any time.
                 {pregen.total ? ` ${Math.round((pregen.done / pregen.total) * 100)}%` : ''}
               </Muted>
               <View style={styles.pregenTrack}>

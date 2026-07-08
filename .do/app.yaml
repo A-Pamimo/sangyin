@@ -39,3 +39,14 @@ services:
       - key: SANGYIN_CHATTERBOX_URL
         value: https://a-pamimo--sangyin-chatterbox-web.modal.run
       # (Set kokoro instead to fall back to the fast local CPU voice.)
+      # Persistent storage: DigitalOcean Spaces (S3-compatible). App Platform's disk
+      # is ephemeral, so documents + cached audio live here instead. The two secret
+      # keys are set as ENCRYPTED env vars on the app (not committed to git); mint with:
+      #   doctl spaces keys create sangyin-backend --grants 'bucket=;permission=fullaccess'
+      - key: SANGYIN_S3_ENDPOINT
+        value: https://nyc3.digitaloceanspaces.com
+      - key: SANGYIN_S3_REGION
+        value: nyc3
+      - key: SANGYIN_S3_BUCKET
+        value: sangyin
+      # SANGYIN_S3_ACCESS_KEY / SANGYIN_S3_SECRET_KEY  -> set as SECRET (see command above)

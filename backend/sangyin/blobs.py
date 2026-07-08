@@ -2,9 +2,10 @@
 
 Everything the backend persists — documents, cached audio clips, original PDFs,
 OCR word boxes — is a keyed blob. Locally that's files under the data dir; in a
-cloud deploy it's an S3-compatible bucket (Cloudflare R2) so the API can run
-stateless across instances. R2 is chosen automatically when its env vars are set,
-otherwise it falls back to local files. Keys look like ``audio/<doc>/<ch>/…``.
+cloud deploy it's an S3-compatible bucket (DigitalOcean Spaces, Cloudflare R2, or
+AWS S3) so the API can run stateless across instances. Object storage is chosen
+automatically when its env vars are set, otherwise it falls back to local files.
+Keys look like ``audio/<doc>/<ch>/…``.
 """
 
 from __future__ import annotations
@@ -67,20 +68,27 @@ class LocalBlobStore:
                     f.unlink(missing_ok=True)
 
 
-class R2BlobStore:
-    """Blobs in a Cloudflare R2 (S3-compatible) bucket, for cloud deploys."""
+class S3BlobStore:
+    """Blobs in any S3-compatible bucket (DigitalOcean Spaces, Cloudflare R2, AWS S3)."""
 
-    def __init__(self, account_id: str, access_key: str, secret_key: str, bucket: str) -> None:
+    def __init__(
+        self,
+        endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+        bucket: str,
+        region: str = "us-east-1",
+    ) -> None:
         import boto3
         from botocore.config import Config
 
         self.bucket = bucket
         self.s3 = boto3.client(
             "s3",
-            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+            endpoint_url=endpoint_url,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            region_name="auto",
+            region_name=region,
             config=Config(retries={"max_attempts": 3, "mode": "standard"}),
         )
 
@@ -132,9 +140,24 @@ def read_json(store: BlobStore, key: str) -> dict | None:
 
 
 def make_blob_store(settings) -> BlobStore:
-    """R2 when its env vars are configured, else local files under the data dir."""
+    """S3-compatible object storage when configured, else local files under data_dir.
+
+    Priority: generic S3 (e.g. DigitalOcean Spaces) → Cloudflare R2 → local files.
+    """
+    if settings.s3_endpoint and settings.s3_bucket and settings.s3_access_key and settings.s3_secret_key:
+        return S3BlobStore(
+            settings.s3_endpoint,
+            settings.s3_access_key,
+            settings.s3_secret_key,
+            settings.s3_bucket,
+            settings.s3_region,
+        )
     if settings.r2_bucket and settings.r2_account_id and settings.r2_access_key and settings.r2_secret_key:
-        return R2BlobStore(
-            settings.r2_account_id, settings.r2_access_key, settings.r2_secret_key, settings.r2_bucket
+        return S3BlobStore(
+            f"https://{settings.r2_account_id}.r2.cloudflarestorage.com",
+            settings.r2_access_key,
+            settings.r2_secret_key,
+            settings.r2_bucket,
+            region="auto",
         )
     return LocalBlobStore(settings.data_dir)

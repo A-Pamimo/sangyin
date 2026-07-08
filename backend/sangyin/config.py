@@ -44,8 +44,16 @@ class Settings(BaseSettings):
 
     # Storage / cache (documents + generated audio)
     data_dir: Path = Path.home() / ".sangyin"
-    # Cloudflare R2 (S3-compatible) for cloud deploys. When all four are set, blobs
-    # (documents, audio, originals) go to R2 instead of local files under data_dir.
+    # Generic S3-compatible object storage for cloud deploys — e.g. DigitalOcean
+    # Spaces. When endpoint + bucket + keys are all set, blobs (documents, audio,
+    # originals) go here instead of local files under data_dir. Takes priority over R2.
+    s3_endpoint: str = ""  # e.g. https://nyc3.digitaloceanspaces.com
+    s3_region: str = "us-east-1"  # Spaces: the region slug, e.g. nyc3
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = ""
+    # Cloudflare R2 (also S3-compatible). Used when the generic S3 vars above are
+    # unset but all four of these are set; the endpoint is derived from the account id.
     r2_account_id: str = ""
     r2_access_key: str = ""
     r2_secret_key: str = ""

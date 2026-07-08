@@ -177,6 +177,7 @@ export default function LandingScreen() {
             docs={docs}
             onOpen={(id) => router.push({ pathname: '/reader', params: { id } })}
           />
+          <GuideStage onImport={() => router.push('/import')} />
           <StatementStage />
           <ContactSection onOpen={() => router.push('/library')} onImport={() => router.push('/import')} />
         </Animated.ScrollView>
@@ -359,6 +360,77 @@ function GalleryInner({ c, s, cards, maxShift, setTrackW, onOpen }: any) {
   );
 }
 
+const GUIDE = [
+  {
+    n: '1',
+    title: 'Bring your reading',
+    body: 'Import a PDF, EPUB, DOCX or text file, paste an article, or drop in a link. Everything lands in one library.',
+  },
+  {
+    n: '2',
+    title: 'Press play',
+    body: 'Narration starts the moment the first sentence is ready — no waiting for the whole document to process.',
+  },
+  {
+    n: '3',
+    title: 'Follow along',
+    body: 'The spoken sentence lights up as you listen. Tap any line to jump there, and set the pace from 0.5× to 2×.',
+  },
+  {
+    n: '4',
+    title: 'Pick up anywhere',
+    body: 'Sangyin remembers your spot in every document and resumes right where you left off — on any device.',
+  },
+];
+
+function GuideStage({ onImport }: { onImport: () => void }) {
+  const { colors: c } = useTheme();
+  const { width: vw } = useWindowDimensions();
+  const s = useMemo(() => makeStyles(c), [c]);
+  const twoCol = vw > 720;
+  return (
+    <Stage heightVh={1.9} bg={c.bg} leadVh={0.9}>
+      <View style={[styles0.center, { paddingHorizontal: tokens.space(6) }]}>
+        <View style={{ maxWidth: 1000, width: '100%', alignSelf: 'center' }}>
+          <Anim a={{ y: [40, 0], opacity: [0, 1] }} range={[0, 0.24]}>
+            <Text style={s.kicker}>— Getting started</Text>
+          </Anim>
+          <Anim a={{ y: [40, 0], opacity: [0, 1] }} range={[0.05, 0.3]}>
+            <Text style={s.h2Center}>
+              From file to <Text style={{ color: c.accent }}>voice</Text> in four steps.
+            </Text>
+          </Anim>
+          <View style={[s.stepGrid, { flexDirection: twoCol ? 'row' : 'column', flexWrap: twoCol ? 'wrap' : 'nowrap' }]}>
+            {GUIDE.map((step, i) => (
+              <Anim
+                key={step.n}
+                a={{ y: [50, 0], opacity: [0, 1] }}
+                range={[0.16 + i * 0.12, 0.44 + i * 0.12]}
+                style={{ width: twoCol ? '48%' : '100%' }}
+              >
+                <View style={s.step}>
+                  <View style={s.stepNum}>
+                    <Text style={s.stepNumText}>{step.n}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.cardTitle}>{step.title}</Text>
+                    <Text style={s.cardBody}>{step.body}</Text>
+                  </View>
+                </View>
+              </Anim>
+            ))}
+          </View>
+          <Anim a={{ y: [40, 0], opacity: [0, 1] }} range={[0.6, 0.9]} style={{ alignItems: 'center', marginTop: tokens.space(10) }}>
+            <Pressable onPress={onImport} style={s.ctaPrimary}>
+              <Text style={s.ctaPrimaryText}>Import your first document</Text>
+            </Pressable>
+          </Anim>
+        </View>
+      </View>
+    </Stage>
+  );
+}
+
 function StatementStage() {
   const { colors: c } = useTheme();
   const s = useMemo(() => makeStyles(c), [c]);
@@ -466,6 +538,11 @@ const makeStyles = (c: Palette) =>
     cardIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: c.accent, marginBottom: tokens.space(4) },
     cardTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3, marginBottom: 7 },
     cardBody: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 14.5, lineHeight: 23 },
+
+    stepGrid: { gap: tokens.space(5), marginTop: tokens.space(12), justifyContent: 'space-between' },
+    step: { flexDirection: 'row', gap: tokens.space(4), alignItems: 'flex-start', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: tokens.radius + 2, padding: tokens.space(6), ...tokens.shadow },
+    stepNum: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+    stepNumText: { fontFamily: tokens.fonts.display, color: c.onAccent, fontSize: 19, fontWeight: '700' },
 
     workCard: { width: 320, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: tokens.radius + 6, overflow: 'hidden', ...tokens.shadow },
     workShot: { height: 200, justifyContent: 'flex-end', padding: tokens.space(4) },

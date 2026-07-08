@@ -15,6 +15,24 @@ self-hostable Python server that does the parsing and speech synthesis.
 
 ---
 
+## Try it now (hosted)
+
+Sangyin runs live in the cloud — nothing to install:
+
+| | |
+|---|---|
+| **📱 Open the app** | **https://sangyin-web-m5khb.ondigitalocean.app** |
+| ⚙️ Backend API (the engine it talks to) | https://sangyin-backend-inwls.ondigitalocean.app |
+
+Open the app link on any phone or browser, import a document, and press play. The
+hosted build already points at the hosted backend, so there's nothing to configure.
+
+> The hosted demo runs the fast **Kokoro** voice on ephemeral storage. To run your
+> own cloud copy — with the natural Chatterbox voice and persistent storage — see
+> [`backend/DEPLOY.md`](backend/DEPLOY.md).
+
+---
+
 ## Why client–server?
 
 Good neural TTS is too heavy to run on a phone. So Sangyin splits in two:
@@ -112,6 +130,24 @@ the app's **Backend URL** (Settings) to your public URL.
 
 Documents and generated audio are cached on disk under `~/.sangyin` (override with
 `SANGYIN_DATA_DIR`); no database required.
+
+### Deploy to the cloud (so your PC can be off)
+
+To run Sangyin fully hosted — the API always-on, a natural GPU voice on demand, and
+storage that survives restarts — [`backend/DEPLOY.md`](backend/DEPLOY.md) walks through
+the recommended split:
+
+- **API** → DigitalOcean App Platform (CPU, always-on) — `.do/app.yaml` + `backend/Dockerfile`
+- **Web app** → DigitalOcean static site — `.do/web.yaml` (its own public URL)
+- **Natural voice** → [Chatterbox](https://github.com/resemble-ai/chatterbox) on Modal (serverless GPU, scales to zero) — `backend/modal_chatterbox.py`
+- **Storage** → Cloudflare R2 (S3-compatible; free egress) via `SANGYIN_R2_*`
+
+Both DigitalOcean apps deploy straight from a spec:
+
+```bash
+doctl apps create --spec .do/app.yaml   # backend API
+doctl apps create --spec .do/web.yaml   # web app (bakes in the API URL)
+```
 
 ---
 

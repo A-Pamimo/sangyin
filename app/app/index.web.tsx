@@ -22,7 +22,7 @@ export default function LandingWeb() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinRef = useRef<HTMLDivElement | null>(null);
   const cameraRef = useRef<HTMLDivElement | null>(null);
-  const enterRef = useRef<HTMLButtonElement | null>(null);
+  const shelfRef = useRef<HTMLDivElement | null>(null);
 
   // Theme → CSS custom properties consumed by the injected room stylesheet.
   const vars = useMemo(
@@ -50,8 +50,8 @@ export default function LandingWeb() {
     const scroller = scrollRef.current;
     const pin = pinRef.current;
     const cam = cameraRef.current;
-    const enter = enterRef.current;
-    if (!scroller || !pin || !cam || !enter) return;
+    const shelf = shelfRef.current;
+    if (!scroller || !pin || !cam || !shelf) return;
 
     const smooth = (x: number) => {
       x = Math.max(0, Math.min(1, x));
@@ -59,33 +59,27 @@ export default function LandingWeb() {
     };
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-    const setCam = (cz: number, cry: number, cy: number, nook: number, intro: number) => {
+    const setCam = (cz: number, cry: number, cy: number, intro: number, shelfP: number) => {
       cam.style.setProperty('--cz', cz + 'px');
       cam.style.setProperty('--cry', cry + 'deg');
       cam.style.setProperty('--cy', cy + 'px');
-      pin.style.setProperty('--nook', nook.toFixed(3));
       pin.style.setProperty('--intro', intro.toFixed(3));
+      pin.style.setProperty('--shelf', shelfP.toFixed(3));
+      shelf.style.pointerEvents = shelfP > 0.72 ? 'auto' : 'none';
     };
 
     const apply = (t: number) => {
-      // Spread motion across (almost) the whole scroll so there's no dead range:
-      // camera flies to ~90%, glow lands ~88%, the CTA finishes ~98%.
-      const fly = smooth(t / 0.9);
-      const nook = smooth((t - 0.55) / 0.32);
+      // You fly down the aisle, and in the back half of the scroll the bookshelf
+      // rises up and fills the view — you scroll *into* your library.
+      const fly = smooth(t / 0.85);
       const intro = smooth(t / 0.16);
-      const arrive = smooth((t - 0.68) / 0.3);
-      // Camera rotates gently *while* it moves down the aisle, landing on the
-      // centered book in front of the window — no big end-turn (that cornered it).
-      setCam(lerp(0, 1350, fly), lerp(0, -12, fly), lerp(0, -8, fly), nook, intro);
-      enter.style.opacity = arrive.toFixed(3);
-      enter.style.pointerEvents = arrive > 0.7 ? 'auto' : 'none';
+      const shelfP = smooth((t - 0.42) / 0.44);
+      setCam(lerp(0, 1500, fly), lerp(0, -10, fly), lerp(0, -8, fly), intro, shelfP);
     };
 
     if (reduce) {
-      // Reduce motion: frame the arrival, no scrub.
-      setCam(1350, -12, -8, 1, 1);
-      enter.style.opacity = '1';
-      enter.style.pointerEvents = 'auto';
+      // Reduce motion: frame the arrival with the shelf shown, no scrub.
+      setCam(1500, -10, -8, 1, 1);
       return;
     }
 
@@ -143,15 +137,6 @@ export default function LandingWeb() {
                   <div className="sy-srf sy-wall sy-wall-l" />
                   <div className="sy-srf sy-wall sy-wall-r" />
                   <div className="sy-srf sy-backwall" />
-                  <div className="sy-nook">
-                    <div className="sy-nook-glow" />
-                    <div className="sy-nook-shadow" />
-                    <div className="sy-case">
-                      <div className="sy-case-row" />
-                      <div className="sy-case-row" />
-                      <div className="sy-case-row" />
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -173,13 +158,18 @@ export default function LandingWeb() {
                 <span>SCROLL IN</span>
                 <div className="sy-cue-line" />
               </div>
-              <div className="sy-enter-wrap">
-                <div className="sy-enter-cap">You've arrived</div>
-                <div className="sy-enter-title">Your shelf is waiting.</div>
-                <button className="sy-enter" ref={enterRef} onClick={enterLibrary}>
-                  Open the library ↓
-                </button>
+            </div>
+            <div className="sy-shelf-scrim" />
+            <div className="sy-shelf" ref={shelfRef}>
+              <div className="sy-shelf-eyebrow">You've arrived</div>
+              <div className="sy-shelf-title">Your library</div>
+              <div className="sy-shelf-case">
+                <div className="sy-shelf-row" />
+                <div className="sy-shelf-row" />
+                <div className="sy-shelf-row" />
+                <div className="sy-shelf-row" />
               </div>
+              <button className="sy-shelf-cta" onClick={enterLibrary}>Open the library →</button>
             </div>
           </div>
         </section>
@@ -244,30 +234,6 @@ const ROOM_CSS = `
     background:linear-gradient(180deg, color-mix(in srgb,var(--amber) 85%, #fff), color-mix(in srgb,var(--amber) 55%, var(--accentDeep)));
     border-radius:80px 80px 6px 6px; box-shadow:0 0 90px 24px color-mix(in srgb,var(--amber) 45%, transparent); opacity:.9; }
 
-  /* the destination EVOLVES into your bookcase — it emerges from the dark as you arrive */
-  .sy-nook{ position:absolute; left:0; top:0; transform-style:preserve-3d; }
-  .sy-nook-glow{ position:absolute; width:820px; height:680px; left:-410px; top:-340px; transform:translate3d(60px,50px,-1820px);
-    background:radial-gradient(closest-side, color-mix(in srgb,var(--amber) 72%, transparent), transparent 72%); opacity:calc(.4 + var(--nook,0) * .6); }
-  .sy-nook-shadow{ position:absolute; width:360px; height:88px; left:-180px; top:-44px; transform:translate3d(60px,298px,-1690px) rotateX(90deg);
-    background:radial-gradient(closest-side, rgba(0,0,0,.6), transparent 76%); }
-  .sy-case{ position:absolute; width:520px; height:432px; left:-260px; top:-216px;
-    transform:translate3d(60px,84px,-1700px) rotateY(-11deg) scale(calc(.86 + var(--nook,0) * .14));
-    transform-style:preserve-3d; backface-visibility:hidden; opacity:calc(.12 + var(--nook,0) * .88);
-    background:linear-gradient(var(--wood), color-mix(in srgb,var(--wood) 62%, #000));
-    border:12px solid color-mix(in srgb,var(--wood) 55%, #000); border-radius:4px;
-    box-shadow:0 44px 74px -20px rgba(0,0,0,.72), inset 0 0 48px rgba(0,0,0,.55);
-    display:flex; flex-direction:column; padding:12px; }
-  .sy-case-row{ flex:1; border-bottom:10px solid color-mix(in srgb,var(--wood) 46%, #000);
-    background:repeating-linear-gradient(90deg,
-      #5F6B44 0 17px, #8A4630 17px 31px, #7C6A55 31px 44px, #414A32 44px 61px,
-      #9A5B3F 61px 74px, #556052 74px 92px, #6B5B4A 92px 106px, #8A6D3B 106px 122px, #4E543F 122px 138px);
-    box-shadow:inset 0 9px 14px -7px rgba(0,0,0,.7), inset 0 -3px 6px rgba(0,0,0,.4); }
-  .sy-case-row:last-child{ border-bottom:0; }
-  .sy-case-row:nth-child(2){ background-position:34px 0; }
-  .sy-case-row:nth-child(3){ background-position:68px 0; }
-  .sy-case::after{ content:""; position:absolute; inset:0; pointer-events:none; border-radius:2px;
-    background:linear-gradient(105deg, rgba(255,255,255,.05), transparent 30%, rgba(0,0,0,.32)); }
-
   .sy-atmos{ position:absolute; inset:0; pointer-events:none; z-index:2;
     background:radial-gradient(70% 55% at 50% 42%, color-mix(in srgb,var(--amber) 12%, transparent), transparent 62%), radial-gradient(120% 100% at 50% 50%, transparent 46%, rgba(0,0,0,.5) 100%); }
 
@@ -281,11 +247,25 @@ const ROOM_CSS = `
   .sy-cue{ position:absolute; left:50%; bottom:30px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:8px; color:rgba(243,236,221,.6); opacity:calc(1 - var(--intro,0)); }
   .sy-cue span{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10px; letter-spacing:.32em; }
   .sy-cue-line{ width:1px; height:30px; background:currentColor; opacity:.6; }
-  .sy-enter-wrap{ position:absolute; left:0; right:0; bottom:15%; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; padding:0 24px;
-    opacity:var(--nook,0); }
-  .sy-enter-cap{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:var(--amber); }
-  .sy-enter-title{ font-family:'Bricolage Grotesque',system-ui,sans-serif; font-weight:700; font-size:clamp(26px,4vw,40px); letter-spacing:-.02em; color:#F3ECDD; }
-  .sy-enter{ pointer-events:none; font-family:'Hanken Grotesk',system-ui,sans-serif; font-size:15.5px; font-weight:600; cursor:pointer; color:var(--onAccent);
-    background:var(--accent); border:0; padding:14px 30px; border-radius:9px; box-shadow:0 14px 34px -12px rgba(0,0,0,.7); opacity:0; transition:background .2s; }
-  .sy-enter:hover{ background:var(--accentDeep); }
+  /* The bookshelf you scroll INTO: it rises up and fills the view as the clear payoff. */
+  .sy-shelf-scrim{ position:absolute; inset:0; z-index:3; background:#0c0805; opacity:calc(var(--shelf,0) * .74); pointer-events:none; }
+  .sy-shelf{ position:absolute; inset:0; z-index:6; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; padding:76px 24px 44px; text-align:center; pointer-events:none;
+    opacity:var(--shelf,0); transform:translateY(calc((1 - var(--shelf,0)) * 46px)) scale(calc(.9 + var(--shelf,0) * .1)); }
+  .sy-shelf-eyebrow{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; font-weight:700; letter-spacing:.26em; text-transform:uppercase; color:var(--amber); }
+  .sy-shelf-title{ font-family:'Bricolage Grotesque',system-ui,sans-serif; font-weight:700; font-size:clamp(34px,5.4vw,58px); letter-spacing:-.03em; color:#F3ECDD; margin-top:-4px; }
+  .sy-shelf-case{ width:min(880px,94vw); border:13px solid color-mix(in srgb,var(--wood) 52%, #000); border-radius:6px;
+    background:linear-gradient(var(--wood), color-mix(in srgb,var(--wood) 60%, #000));
+    box-shadow:0 50px 90px -30px rgba(0,0,0,.75), inset 0 0 60px rgba(0,0,0,.5); padding:14px; display:flex; flex-direction:column; }
+  .sy-shelf-row{ height:clamp(48px,7vh,74px); border-bottom:12px solid color-mix(in srgb,var(--wood) 44%, #000);
+    background:repeating-linear-gradient(90deg,
+      #5F6B44 0 20px, #8A4630 20px 37px, #7C6A55 37px 52px, #414A32 52px 72px,
+      #9A5B3F 72px 88px, #556052 88px 110px, #6B5B4A 110px 126px, #8A6D3B 126px 146px, #4E543F 146px 165px);
+    box-shadow:inset 0 10px 16px -8px rgba(0,0,0,.72), inset 0 -3px 7px rgba(0,0,0,.4); }
+  .sy-shelf-row:last-child{ border-bottom:0; }
+  .sy-shelf-row:nth-child(even){ background-position:52px 0; }
+  .sy-shelf-cta{ margin-top:6px; font-family:'Hanken Grotesk',system-ui,sans-serif; font-size:16px; font-weight:600; cursor:pointer; color:var(--onAccent);
+    background:var(--accent); border:0; padding:15px 34px; border-radius:10px; box-shadow:0 16px 40px -14px rgba(0,0,0,.7); transition:background .2s, transform .1s; }
+  .sy-shelf-cta:hover{ background:var(--accentDeep); }
+  .sy-shelf-cta:active{ transform:translateY(1px); }
 `;

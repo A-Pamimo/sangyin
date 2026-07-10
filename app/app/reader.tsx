@@ -25,7 +25,7 @@ import { usePlayer } from '../src/player/usePlayer';
 import { NATURAL_VOICE_ID } from '../src/config';
 import { sfx } from '../src/sfx/sfx';
 import { useApi, useAppStore } from '../src/store/appStore';
-import { bevel, mix, Palette, tokens, useTheme } from '../src/theme';
+import { mix, Palette, tokens, useTheme } from '../src/theme';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -340,6 +340,18 @@ export default function ReaderScreen() {
   const loadingAudio = !error && state.playing && (state.buffering || state.loadedCount === 0);
   const warmingUp = loadingAudio && state.loadedCount === 0;
 
+  // Playback position within the current chapter — drives the waveform seek strip.
+  // Purely presentational + reuses the existing onTapSentence jump; no new playback logic.
+  const posInChapter = chapter.sentences.findIndex((s) => s.index === state.currentIndex);
+  const playFrac =
+    chapter.sentences.length > 0 && posInChapter >= 0 ? (posInChapter + 1) / chapter.sentences.length : 0;
+  const seekTo = (f: number) => {
+    const list = chapter.sentences;
+    if (!list.length) return;
+    const pos = Math.max(0, Math.min(list.length - 1, Math.floor(f * list.length)));
+    onTapSentence(list[pos].index);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -488,6 +500,15 @@ export default function ReaderScreen() {
           />
         )}
 
+        {chapter.sentences.length > 0 ? (
+          <Waveform
+            frac={playFrac}
+            label={`${posInChapter >= 0 ? posInChapter + 1 : 0}/${chapter.sentences.length}`}
+            onSeek={seekTo}
+            colors={colors}
+          />
+        ) : null}
+
         <View style={styles.transport}>
           <TransportButton
             label="⏮"
@@ -576,16 +597,64 @@ function TransportButton({
   );
 }
 
+// The "instrument" seek strip: the chapter drawn as a waveform, filled to the
+// current sentence. Tapping seeks (reuses onTapSentence — no new playback logic).
+function Waveform({
+  frac,
+  label,
+  onSeek,
+  colors,
+}: {
+  frac: number;
+  label: string;
+  onSeek: (f: number) => void;
+  colors: Palette;
+}) {
+  const [w, setW] = useState(0);
+  const BARS = 44;
+  const filled = Math.round(frac * BARS);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+      <Pressable
+        onLayout={(e) => setW(e.nativeEvent.layout.width)}
+        onPress={(e) => {
+          if (w > 0) onSeek(Math.max(0, Math.min(1, e.nativeEvent.locationX / w)));
+        }}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, height: 42 }}
+      >
+        {Array.from({ length: BARS }, (_, i) => {
+          const env = Math.sin((i / BARS) * Math.PI);
+          const h = 8 + env * 22;
+          const head = i === filled;
+          return (
+            <View key={i} style={{ flex: 1, height: 42, justifyContent: 'center' }}>
+              <View
+                style={{
+                  height: Math.max(5, h),
+                  borderRadius: 1,
+                  backgroundColor: head ? colors.warm : i < filled ? colors.accent : colors.surfaceAlt,
+                }}
+              />
+            </View>
+          );
+        })}
+      </Pressable>
+      <Text
+        style={{
+          fontFamily: tokens.fonts.mono,
+          fontSize: 11.5,
+          color: colors.textDim,
+          minWidth: 54,
+          textAlign: 'right',
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 const makeStyles = (c: Palette, isDark: boolean) => {
-  const bev = bevel(c, isDark, 'raised');
-  const bevBorder = {
-    borderTopColor: bev.borderTopColor,
-    borderLeftColor: bev.borderLeftColor,
-    borderBottomColor: bev.borderBottomColor,
-    borderRightColor: bev.borderRightColor,
-    borderWidth: tokens.bevelWidth,
-  };
-  const accentLight = mix(c.accent, '#FFFFFF', 0.18);
   const accentShadow = mix(c.accent, '#000000', 0.22);
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
@@ -640,47 +709,40 @@ const makeStyles = (c: Palette, isDark: boolean) => {
       right: 0,
       bottom: 0,
       backgroundColor: c.surface,
-      borderTopColor: bev.borderTopColor,
-      borderLeftColor: bev.borderLeftColor,
-      borderRightColor: bev.borderRightColor,
-      borderTopWidth: tokens.bevelWidth,
-      borderLeftWidth: tokens.bevelWidth,
-      borderRightWidth: tokens.bevelWidth,
-      borderTopLeftRadius: tokens.radiusChrome,
-      borderTopRightRadius: tokens.radiusChrome,
-      padding: tokens.space(4),
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingHorizontal: tokens.space(4),
+      paddingTop: tokens.space(4),
       paddingBottom: tokens.space(6),
       shadowColor: '#363E28',
       shadowOffset: { width: 0, height: -8 },
-      shadowOpacity: 0.12,
+      shadowOpacity: 0.1,
       shadowRadius: 20,
       elevation: 12,
     },
-    transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(6) },
+    transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(5) },
     transportBtn: {
-      width: 52,
-      height: 52,
-      borderRadius: tokens.radiusChrome,
+      width: 46,
+      height: 46,
+      borderRadius: 12,
       backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
       alignItems: 'center',
       justifyContent: 'center',
-      ...bevBorder,
     },
     playBtn: {
-      width: 64,
-      height: 64,
-      borderRadius: tokens.radiusChrome,
+      width: 60,
+      height: 60,
+      borderRadius: 16,
       backgroundColor: c.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: tokens.bevelWidth,
-      borderTopColor: accentLight,
-      borderLeftColor: accentLight,
-      borderBottomColor: accentShadow,
-      borderRightColor: accentShadow,
+      borderWidth: 1,
+      borderColor: accentShadow,
       shadowColor: '#363E28',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
+      shadowOpacity: 0.32,
       shadowRadius: 16,
       elevation: 6,
     },

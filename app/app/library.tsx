@@ -179,31 +179,45 @@ function Spine({
   const [hovered, setHovered] = useState(false);
   const tag = SOURCE_LABEL[doc.source_type] ?? doc.source_type.toUpperCase();
   const lift = hovered && Platform.OS === 'web' ? { transform: [{ translateY: -14 }] } : null;
+  const state = pct === 100 ? ' · finished' : pct > 0 ? ' · reading' : ' · new';
   return (
-    <Pressable
-      onPress={onOpen}
-      onLongPress={onRemove}
-      delayLongPress={450}
-      // @ts-ignore — onHoverIn/onHoverOut are web-only Pressable props (react-native-web).
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      style={[
-        styles.spine,
-        { backgroundColor: palette.bg },
-        current && { borderColor: '#C79A5B', borderWidth: 2 },
-        lift,
-      ]}
-    >
-      <Text style={[styles.spineTag, { color: palette.ink }]} numberOfLines={1}>{tag}</Text>
-      <View style={styles.spineTitleWrap}>
-        <Text numberOfLines={1} style={[styles.spineTitle, { color: palette.ink }]}>
-          {doc.title}
-        </Text>
-      </View>
-      <View style={styles.spineNotch}>
-        <View style={[styles.spineNotchFill, { width: `${pct}%`, backgroundColor: palette.ink }]} />
-      </View>
-    </Pressable>
+    <View style={styles.spineWrap}>
+      <Pressable
+        onPress={onOpen}
+        onLongPress={onRemove}
+        delayLongPress={450}
+        // @ts-ignore — onHoverIn/onHoverOut are web-only Pressable props (react-native-web).
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        style={[
+          styles.spine,
+          { backgroundColor: palette.bg },
+          current && { borderColor: '#C79A5B', borderWidth: 2 },
+          lift,
+        ]}
+      >
+        <Text style={[styles.spineTag, { color: palette.ink }]} numberOfLines={1}>{tag}</Text>
+        <View style={styles.spineTitleWrap}>
+          <Text numberOfLines={1} style={[styles.spineTitle, { color: palette.ink }]}>
+            {doc.title}
+          </Text>
+        </View>
+        <View style={styles.spineNotch}>
+          <View style={[styles.spineNotchFill, { width: `${pct}%`, backgroundColor: palette.ink }]} />
+        </View>
+      </Pressable>
+
+      {hovered && Platform.OS === 'web' ? (
+        <View style={[styles.pop, { pointerEvents: 'none' }]}>
+          <Text style={styles.popTag}>{tag}{state}</Text>
+          <Text style={styles.popTitle} numberOfLines={2}>{doc.title}</Text>
+          <View style={styles.popMeter}>
+            <View style={[styles.popFill, { width: `${pct}%` }]} />
+          </View>
+          <Text style={styles.popRowText}>{pct}% read · tap to open</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -254,4 +268,25 @@ const makeStyles = (c: Palette, mono: string) =>
     },
     spineNotch: { width: '78%', height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.28)', overflow: 'hidden' },
     spineNotchFill: { height: '100%', opacity: 0.9 },
+
+    spineWrap: { position: 'relative' },
+    pop: {
+      position: 'absolute',
+      bottom: '100%',
+      left: (SPINE_W - 200) / 2,
+      width: 200,
+      marginBottom: 12,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 8,
+      padding: 12,
+      zIndex: 50,
+      ...tokens.shadow,
+    },
+    popTag: { fontFamily: mono, color: c.accent, fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+    popTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2, marginTop: 6, lineHeight: 19 },
+    popMeter: { height: 4, borderRadius: 2, backgroundColor: c.surfaceAlt, overflow: 'hidden', marginTop: 10 },
+    popFill: { height: '100%', backgroundColor: c.accent },
+    popRowText: { fontFamily: mono, color: c.textDim, fontSize: 10.5, letterSpacing: 0.3, marginTop: 6 },
   });

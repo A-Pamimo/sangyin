@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Muted, Screen } from '../src/components/ui';
 import { BevelButton, SegmentedControl, Window } from '../src/components/retro';
@@ -144,9 +144,12 @@ export default function ImportScreen() {
 
         {tab === 'file' && (
           <Window title="OPEN.FILE" dots>
-            <Text style={styles.label}>Upload a document</Text>
-            <Muted style={{ marginTop: 6 }}>Supported: PDF, EPUB, DOCX, and .txt files.</Muted>
-            <BevelButton title="Choose file…" onPress={pickFile} loading={busy} style={{ marginTop: 16, alignSelf: 'flex-start' }} />
+            <Pressable onPress={pickFile} disabled={busy} style={styles.drop}>
+              <Text style={styles.dropGlyph}>＋</Text>
+              <Text style={styles.dropBig}>Drop a book onto the shelf</Text>
+              <Text style={styles.dropSmall}>PDF · EPUB · DOCX · TXT</Text>
+            </Pressable>
+            <BevelButton title="Choose file…" onPress={pickFile} loading={busy} style={{ marginTop: 14, alignSelf: 'flex-start' }} />
           </Window>
         )}
       </ScrollView>
@@ -182,6 +185,20 @@ const makeStyles = (c: Palette, mono: string) =>
       fontSize: 15,
     },
     multiline: { minHeight: 180, textAlignVertical: 'top' },
+    drop: {
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: c.accent,
+      borderRadius: tokens.radiusChrome,
+      backgroundColor: c.surfaceAlt,
+      paddingVertical: 30,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      gap: 7,
+    },
+    dropGlyph: { fontSize: 26, color: c.accent, fontWeight: '700' },
+    dropBig: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 },
+    dropSmall: { fontFamily: mono, color: c.faint, fontSize: 11, letterSpacing: 0.6 },
     overlay: {
       position: 'absolute',
       top: 0,

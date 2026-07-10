@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -22,11 +22,24 @@ interface AppState {
   /** Per-document resume position, keyed by document id. */
   positions: Record<string, Position>;
 
+  /** UI sound effects (web-only; no-op on native). Opt-in, off by default. */
+  sfxEnabled: boolean;
+  /** Suppress the boot intro, marquees, parallax, and scramble animations. */
+  reduceMotion: boolean;
+  /**
+   * Whether the boot intro has already shown this launch. Session-only (never
+   * persisted), so the intro plays once per cold start and never again mid-session.
+   */
+  bootSeen: boolean;
+
   setBackendUrl: (url: string) => void;
   setVoice: (voice: string, lang?: string) => void;
   setSpeed: (speed: number) => void;
   setThemeName: (name: ThemeName) => void;
   savePosition: (docId: string, pos: Position) => void;
+  setSfxEnabled: (on: boolean) => void;
+  setReduceMotion: (on: boolean) => void;
+  setBootSeen: (seen: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -38,6 +51,11 @@ export const useAppStore = create<AppState>()(
       speed: 1,
       themeName: 'sage',
       positions: {},
+      // Defaults live here (not only in partialize): a missing persisted key is
+      // `undefined`, which is falsy — so the initializer is the source of truth.
+      sfxEnabled: false,
+      reduceMotion: false,
+      bootSeen: false,
 
       setBackendUrl: (backendUrl) => set({ backendUrl: backendUrl.trim() }),
       setVoice: (voice, lang) => set((s) => ({ voice, lang: lang ?? s.lang })),
@@ -45,10 +63,17 @@ export const useAppStore = create<AppState>()(
       setThemeName: (themeName) => set({ themeName }),
       savePosition: (docId, pos) =>
         set((s) => ({ positions: { ...s.positions, [docId]: pos } })),
+      setSfxEnabled: (sfxEnabled) => set({ sfxEnabled }),
+      setReduceMotion: (reduceMotion) => set({ reduceMotion }),
+      setBootSeen: (bootSeen) => set({ bootSeen }),
     }),
     {
       name: 'sangyin-app',
       storage: createJSONStorage(() => AsyncStorage),
+      // Persist only durable preferences. `bootSeen` is intentionally omitted so
+      // it resets to `false` on every cold start (intro once per launch). No
+      // `version`/`migrate` here: the default shallow merge keeps initializer
+      // defaults for the new keys and preserves existing stored state.
       partialize: (s) => ({
         backendUrl: s.backendUrl,
         voice: s.voice,
@@ -56,6 +81,8 @@ export const useAppStore = create<AppState>()(
         speed: s.speed,
         themeName: s.themeName,
         positions: s.positions,
+        sfxEnabled: s.sfxEnabled,
+        reduceMotion: s.reduceMotion,
       }),
     },
   ),
@@ -65,4 +92,24 @@ export const useAppStore = create<AppState>()(
 export function useApi(): ApiClient {
   const backendUrl = useAppStore((s) => s.backendUrl);
   return useMemo(() => new ApiClient(backendUrl), [backendUrl]);
+}
+
+/**
+ * True once the persisted state has finished rehydrating from AsyncStorage.
+ * Gate first-frame UI on this (e.g. the boot intro) so a persisted preference
+ * like `reduceMotion` isn't briefly overridden by initializer defaults.
+ */
+export function useHasHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(() => useAppStore.persist.hasHydrated());
+  useEffect(() => {
+    // Already-hydrated (e.g. synchronous rehydrate) is covered by the initial state;
+    // otherwise flip when the async rehydrate finishes.
+    if (useAppStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    const unsub = useAppStore.persist.onFinishHydration(() => setHydrated(true));
+    return unsub;
+  }, []);
+  return hydrated;
 }

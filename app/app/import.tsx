@@ -3,9 +3,12 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Button, Card, Muted, Screen } from '../src/components/ui';
+import { Muted, Screen } from '../src/components/ui';
+import { BevelButton, SegmentedControl, Window } from '../src/components/retro';
+import { Marquee } from '../src/fx/Marquee';
+import { sfx } from '../src/sfx/sfx';
 import { useApi } from '../src/store/appStore';
-import { Palette, tokens, useTheme } from '../src/theme';
+import { Palette, tokens, useRetro } from '../src/theme';
 
 type Tab = 'paste' | 'url' | 'file';
 
@@ -18,8 +21,17 @@ const BUSY_LABEL: Record<Tab, string> = {
 export default function ImportScreen() {
   const api = useApi();
   const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const r = useRetro();
+  const { colors } = r;
+  const styles = useMemo(() => makeStyles(colors, r.mono), [colors, r.mono]);
+  const inset = r.bevel('inset');
+  const insetBorder = {
+    borderTopColor: inset.borderTopColor,
+    borderLeftColor: inset.borderLeftColor,
+    borderBottomColor: inset.borderBottomColor,
+    borderRightColor: inset.borderRightColor,
+    borderWidth: inset.borderWidth,
+  };
 
   const [tab, setTab] = useState<Tab>('paste');
   const [text, setText] = useState('');
@@ -35,6 +47,7 @@ export default function ImportScreen() {
     setError(null);
     try {
       const doc = await fn();
+      sfx.play('confirm');
       open(doc.id);
     } catch (e: any) {
       setError(e?.message ?? 'Import failed.');
@@ -63,25 +76,23 @@ export default function ImportScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ gap: tokens.space(4) }}>
-        <View style={styles.tabs}>
-          {(['paste', 'url', 'file'] as Tab[]).map((t) => (
-            <Button
-              key={t}
-              title={t === 'paste' ? 'Paste text' : t === 'url' ? 'Article URL' : 'File'}
-              variant={tab === t ? 'primary' : 'ghost'}
-              onPress={() => setTab(t)}
-              style={{ flex: 1 }}
-            />
-          ))}
-        </View>
+        <SegmentedControl<Tab>
+          segments={[
+            { value: 'paste', label: 'Paste text' },
+            { value: 'url', label: 'Article URL' },
+            { value: 'file', label: 'File' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
         {error ? <Muted style={{ color: colors.danger }}>{error}</Muted> : null}
 
         {tab === 'paste' && (
-          <Card>
+          <Window title="PASTE.TXT" dots>
             <Text style={styles.label}>Title (optional)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, insetBorder]}
               value={title}
               onChangeText={setTitle}
               placeholder="My document"
@@ -89,28 +100,28 @@ export default function ImportScreen() {
             />
             <Text style={[styles.label, { marginTop: 14 }]}>Text</Text>
             <TextInput
-              style={[styles.input, styles.multiline]}
+              style={[styles.input, styles.multiline, insetBorder]}
               value={text}
               onChangeText={setText}
               placeholder="Paste or type the text you want read aloud…"
               placeholderTextColor={colors.textDim}
               multiline
             />
-            <Button
+            <BevelButton
               title="Import & open"
               onPress={() => run(() => api.importText(text, title || undefined))}
               disabled={!text.trim()}
               loading={busy}
               style={{ marginTop: 16 }}
             />
-          </Card>
+          </Window>
         )}
 
         {tab === 'url' && (
-          <Card>
+          <Window title="FETCH.URL" dots>
             <Text style={styles.label}>Article URL</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, insetBorder]}
               value={url}
               onChangeText={setUrl}
               placeholder="https://example.com/article"
@@ -121,51 +132,51 @@ export default function ImportScreen() {
             <Muted style={{ marginTop: 8 }}>
               The backend fetches the page and extracts clean readable text (strips nav and ads).
             </Muted>
-            <Button
+            <BevelButton
               title="Fetch & open"
               onPress={() => run(() => api.importUrl(url.trim()))}
               disabled={!url.trim()}
               loading={busy}
               style={{ marginTop: 16 }}
             />
-          </Card>
+          </Window>
         )}
 
         {tab === 'file' && (
-          <Card>
+          <Window title="OPEN.FILE" dots>
             <Text style={styles.label}>Upload a document</Text>
             <Muted style={{ marginTop: 6 }}>Supported: PDF, EPUB, DOCX, and .txt files.</Muted>
-            <Button title="Choose file…" onPress={pickFile} loading={busy} style={{ marginTop: 16 }} />
-          </Card>
+            <BevelButton title="Choose file…" onPress={pickFile} loading={busy} style={{ marginTop: 16, alignSelf: 'flex-start' }} />
+          </Window>
         )}
       </ScrollView>
 
       {busy && (
-        <View style={styles.overlay} pointerEvents="auto">
-          <View style={styles.overlayCard}>
+        <View style={[styles.overlay, { pointerEvents: 'auto' }]}>
+          <Window title="PROCESSING" style={styles.overlayCard} bodyStyle={{ alignItems: 'center', gap: 14 }}>
             <ActivityIndicator size="large" color={colors.accent} />
             <Text style={styles.overlayText}>{BUSY_LABEL[tab]}</Text>
-            <Muted style={{ marginTop: 4, textAlign: 'center' }}>
-              Large documents can take a few moments.
-            </Muted>
-          </View>
+            <View style={styles.barberWrap}>
+              <Marquee speedPxPerSec={60}>
+                <Text style={styles.barber}>▓▒░ WORKING ░▒▓ ▓▒░ WORKING ░▒▓ ▓▒░ WORKING ░▒▓ </Text>
+              </Marquee>
+            </View>
+            <Muted style={{ textAlign: 'center' }}>Large documents can take a few moments.</Muted>
+          </Window>
         </View>
       )}
     </Screen>
   );
 }
 
-const makeStyles = (c: Palette) =>
+const makeStyles = (c: Palette, mono: string) =>
   StyleSheet.create({
-    tabs: { flexDirection: 'row', gap: tokens.space(2) },
-    label: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 },
+    label: { fontFamily: mono, color: c.text, fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
     input: {
       marginTop: 6,
       backgroundColor: c.surfaceAlt,
       color: c.text,
-      borderRadius: tokens.radiusSm,
-      borderWidth: 1,
-      borderColor: c.border,
+      borderRadius: tokens.radiusChrome,
       padding: 12,
       fontFamily: tokens.fonts.body,
       fontSize: 15,
@@ -179,19 +190,10 @@ const makeStyles = (c: Palette) =>
       bottom: 0,
       alignItems: 'center',
       justifyContent: 'center',
+      padding: tokens.space(6),
       backgroundColor: c.bg + 'E6',
     },
-    overlayCard: {
-      alignItems: 'center',
-      gap: 14,
-      padding: tokens.space(8),
-      borderRadius: tokens.radius,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      maxWidth: 320,
-      ...tokens.shadow,
-    },
+    overlayCard: { maxWidth: 340, width: '100%' },
     overlayText: {
       fontFamily: tokens.fonts.display,
       color: c.text,
@@ -200,4 +202,6 @@ const makeStyles = (c: Palette) =>
       letterSpacing: -0.2,
       textAlign: 'center',
     },
+    barberWrap: { width: '100%', borderRadius: tokens.radiusChrome, overflow: 'hidden' },
+    barber: { fontFamily: mono, color: c.accent, fontSize: 13, letterSpacing: 1 },
   });

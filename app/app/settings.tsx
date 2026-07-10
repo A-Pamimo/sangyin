@@ -1,19 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { ApiClient } from '../src/api/client';
 import { Voice } from '../src/api/types';
-import { Button, Card, Muted, Screen } from '../src/components/ui';
+import { Muted, Screen } from '../src/components/ui';
+import { BevelButton, SegmentedControl, Window } from '../src/components/retro';
+import { sfx } from '../src/sfx/sfx';
 import { useAppStore } from '../src/store/appStore';
-import { Palette, THEME_LABELS, tokens, useTheme } from '../src/theme';
+import { Palette, THEME_LABELS, tokens, useRetro } from '../src/theme';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SWATCHES: Record<string, string> = { sage: '#5F6B44', clay: '#B15238', loam: '#CE9A4E' };
 
 export default function SettingsScreen() {
-  const { backendUrl, voice, speed, themeName, setBackendUrl, setVoice, setSpeed, setThemeName } =
-    useAppStore();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {
+    backendUrl,
+    voice,
+    speed,
+    themeName,
+    sfxEnabled,
+    reduceMotion,
+    setBackendUrl,
+    setVoice,
+    setSpeed,
+    setThemeName,
+    setSfxEnabled,
+    setReduceMotion,
+  } = useAppStore();
+  const r = useRetro();
+  const { colors } = r;
+  const styles = useMemo(() => makeStyles(colors, r.mono), [colors, r.mono]);
+  const inset = r.bevel('inset');
   const [draftUrl, setDraftUrl] = useState(backendUrl);
   const [status, setStatus] = useState<string | null>(null);
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -38,32 +55,55 @@ export default function SettingsScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ gap: tokens.space(4) }}>
-        <Card>
-          <Text style={styles.label}>Theme</Text>
-          <Muted style={{ marginTop: 4 }}>Earth-tone palettes. Loam is a dark mode.</Muted>
-          <View style={styles.chips}>
-            {THEME_LABELS.map((t) => (
-              <Pressable
-                key={t.name}
-                onPress={() => setThemeName(t.name)}
-                style={[styles.chip, themeName === t.name && styles.chipActive]}
-              >
-                <View style={[styles.swatch, { backgroundColor: swatchFor(t.name) }]} />
-                <Text style={[styles.chipText, themeName === t.name && styles.chipTextActive]}>
-                  {t.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card>
+        <Window title="THEME.SYS" dots>
+          <Muted style={{ marginBottom: 12 }}>Earth-tone palettes. Loam is a dark mode.</Muted>
+          <SegmentedControl
+            segments={THEME_LABELS.map((t) => ({ value: t.name, label: t.label, swatch: SWATCHES[t.name] }))}
+            value={themeName}
+            onChange={setThemeName}
+          />
+        </Window>
 
-        <Card>
-          <Text style={styles.label}>Backend URL</Text>
-          <Muted style={{ marginTop: 4 }}>
-            Point the app at your self-hosted Sangyin backend.
-          </Muted>
+        <Window title="SOUND & MOTION">
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.label}>Sound effects</Text>
+              <Muted style={{ marginTop: 2 }}>Tactile UI blips (web only).</Muted>
+            </View>
+            <Switch
+              value={sfxEnabled}
+              onValueChange={(v) => {
+                setSfxEnabled(v);
+                if (v) sfx.play('confirm');
+              }}
+              trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+              thumbColor={colors.surface}
+            />
+          </View>
+          <View style={[styles.switchRow, styles.rowDivider]}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.label}>Reduce motion</Text>
+              <Muted style={{ marginTop: 2 }}>Skip the intro, marquees, and parallax.</Muted>
+            </View>
+            <Switch
+              value={reduceMotion}
+              onValueChange={(v) => {
+                sfx.play('toggle');
+                setReduceMotion(v);
+              }}
+              trackColor={{ true: colors.accent, false: colors.surfaceAlt }}
+              thumbColor={colors.surface}
+            />
+          </View>
+        </Window>
+
+        <Window title="BACKEND.CFG">
+          <Muted style={{ marginBottom: 4 }}>Point the app at your self-hosted Sangyin backend.</Muted>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              { borderTopColor: inset.borderTopColor, borderLeftColor: inset.borderLeftColor, borderBottomColor: inset.borderBottomColor, borderRightColor: inset.borderRightColor, borderWidth: inset.borderWidth },
+            ]}
             value={draftUrl}
             onChangeText={setDraftUrl}
             autoCapitalize="none"
@@ -72,80 +112,53 @@ export default function SettingsScreen() {
             placeholderTextColor={colors.textDim}
           />
           <View style={{ flexDirection: 'row', gap: tokens.space(2), marginTop: 12 }}>
-            <Button title="Test" variant="ghost" onPress={test} style={{ flex: 1 }} />
-            <Button title="Save" onPress={() => setBackendUrl(draftUrl)} style={{ flex: 1 }} />
+            <BevelButton title="Test" variant="ghost" onPress={test} style={{ flex: 1 }} />
+            <BevelButton title="Save" onPress={() => setBackendUrl(draftUrl)} style={{ flex: 1 }} />
           </View>
           {status ? <Muted style={{ marginTop: 10 }}>{status}</Muted> : null}
-        </Card>
+        </Window>
 
-        <Card>
-          <Text style={styles.label}>Voice</Text>
-          <View style={styles.chips}>
-            {voices.map((v) => (
-              <Pressable
-                key={v.id}
-                onPress={() => setVoice(v.id, v.lang_code)}
-                style={[styles.chip, voice === v.id && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, voice === v.id && styles.chipTextActive]}>
-                  {v.name}
-                </Text>
-              </Pressable>
-            ))}
-            {voices.length === 0 ? <Muted>No voices (backend unreachable).</Muted> : null}
-          </View>
-        </Card>
+        <Window title="VOICE.SYS">
+          {voices.length ? (
+            <SegmentedControl
+              scroll
+              segments={voices.map((v) => ({ value: v.id, label: v.name }))}
+              value={voice}
+              onChange={(id) => {
+                const v = voices.find((x) => x.id === id);
+                setVoice(id, v?.lang_code);
+              }}
+            />
+          ) : (
+            <Muted>No voices (backend unreachable).</Muted>
+          )}
+        </Window>
 
-        <Card>
-          <Text style={styles.label}>Default speed</Text>
-          <View style={styles.chips}>
-            {SPEEDS.map((s) => (
-              <Pressable
-                key={s}
-                onPress={() => setSpeed(s)}
-                style={[styles.chip, speed === s && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, speed === s && styles.chipTextActive]}>{s}×</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card>
+        <Window title="SPEED.CFG">
+          <SegmentedControl
+            scroll
+            segments={SPEEDS.map((s) => ({ value: s, label: `${s}×` }))}
+            value={speed}
+            onChange={setSpeed}
+          />
+        </Window>
       </ScrollView>
     </Screen>
   );
 }
 
-const SWATCHES: Record<string, string> = { sage: '#5F6B44', clay: '#B15238', loam: '#CE9A4E' };
-const swatchFor = (name: string) => SWATCHES[name] ?? '#5F6B44';
-
-const makeStyles = (c: Palette) =>
+const makeStyles = (c: Palette, mono: string) =>
   StyleSheet.create({
-    label: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
+    label: { fontFamily: mono, color: c.text, fontSize: 14, fontWeight: '700', letterSpacing: 0.2 },
     input: {
       marginTop: 10,
       backgroundColor: c.surfaceAlt,
       color: c.text,
-      borderRadius: tokens.radiusSm,
-      borderWidth: 1,
-      borderColor: c.border,
+      borderRadius: tokens.radiusChrome,
       padding: 12,
       fontFamily: tokens.fonts.body,
       fontSize: 15,
     },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space(2), marginTop: 12 },
-    chip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surfaceAlt,
-    },
-    swatch: { width: 12, height: 12, borderRadius: 6 },
-    chipActive: { backgroundColor: c.accentSoft, borderColor: c.accent },
-    chipText: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 14, fontWeight: '600' },
-    chipTextActive: { color: c.text },
+    switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    rowDivider: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.border },
   });

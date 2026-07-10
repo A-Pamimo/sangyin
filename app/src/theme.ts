@@ -2,6 +2,7 @@
 // Three palettes (Sage / Clay / Loam) selectable at runtime; the non-color
 // tokens (type, spacing, radius, elevation) are shared across all themes.
 import { useMemo } from 'react';
+import { Platform } from 'react-native';
 
 import { useAppStore } from './store/appStore';
 
@@ -93,9 +94,23 @@ export const tokens = {
     // Loaded on web via app/+html.tsx; falls back to the system font on native.
     display: "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif",
     body: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    // Retro "system chrome" face — window titles, tickers, tags only (never body).
+    // Space Mono is web-loaded; native uses a real platform monospace.
+    mono: Platform.select({
+      web: "'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }) as string,
   },
   radius: 16,
   radiusSm: 12,
+  // Retro window chrome: squarer corners dodge the native per-side-border + radius
+  // fallback bug, and a 2px bevel reads as an "OS window" edge.
+  radiusChrome: 2,
+  bevelWidth: 2,
+  chromeBarHeight: 28,
+  chromeDot: 10,
   space: (n: number) => n * 4,
   // Soft, warm elevation for cards (iOS shadow* + Android elevation + web boxShadow).
   shadow: {
@@ -107,6 +122,73 @@ export const tokens = {
   },
 } as const;
 
+// ---------------------------------------------------------------------------
+// Retro bevel system. Because React Native on iOS/Android collapses per-side
+// border colors to a uniform border once a borderRadius is set, we cannot lean
+// on translucent per-side borders. Instead we precompute OPAQUE edge colors by
+// mixing the face toward white/black, and keep chrome nearly square (radius 2)
+// so web and native render pixel-identically.
+// ---------------------------------------------------------------------------
+
+/** Parse #rgb / #rrggbb / rgb(...) to [r,g,b]. Falls back to mid-grey on miss. */
+function toRgb(color: string): [number, number, number] {
+  const hex = color.trim();
+  if (hex[0] === '#') {
+    let h = hex.slice(1);
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    const n = parseInt(h.slice(0, 6), 16);
+    if (!Number.isNaN(n)) return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = hex.match(/rgba?\(([^)]+)\)/i);
+  if (m) {
+    const p = m[1].split(',').map((x) => parseFloat(x));
+    return [p[0] || 0, p[1] || 0, p[2] || 0];
+  }
+  return [128, 128, 128];
+}
+
+/** Per-channel lerp between two colors → an opaque `rgb(...)` string. */
+export function mix(base: string, target: string, t: number): string {
+  const [r1, g1, b1] = toRgb(base);
+  const [r2, g2, b2] = toRgb(target);
+  const l = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${l(r1, r2)}, ${l(g1, g2)}, ${l(b1, b2)})`;
+}
+
+export type BevelVariant = 'raised' | 'inset';
+
+export interface BevelStyle {
+  face: string;
+  borderTopColor: string;
+  borderLeftColor: string;
+  borderBottomColor: string;
+  borderRightColor: string;
+  borderWidth: number;
+  borderRadius: number;
+}
+
+/**
+ * Beveled edge for retro chrome. `raised` = light top/left + shadow bottom/right;
+ * `inset` swaps them (pressed / sunk wells). Derived from palette tokens so it
+ * reads correctly on Sage/Clay (light) and Loam (dark).
+ */
+export function bevel(colors: Palette, isDark: boolean, variant: BevelVariant = 'raised'): BevelStyle {
+  const face = variant === 'inset' ? colors.surfaceAlt : isDark ? colors.surface : colors.surfaceAlt;
+  const edgeLight = mix(face, '#FFFFFF', isDark ? 0.16 : 0.1);
+  const edgeShadow = mix(face, '#000000', isDark ? 0.42 : 0.16);
+  const tl = variant === 'inset' ? edgeShadow : edgeLight;
+  const br = variant === 'inset' ? edgeLight : edgeShadow;
+  return {
+    face,
+    borderTopColor: tl,
+    borderLeftColor: tl,
+    borderBottomColor: br,
+    borderRightColor: br,
+    borderWidth: tokens.bevelWidth,
+    borderRadius: tokens.radiusChrome,
+  };
+}
+
 export interface Theme {
   name: ThemeName;
   colors: Palette;
@@ -114,6 +196,10 @@ export interface Theme {
   fonts: typeof tokens.fonts;
   radius: number;
   radiusSm: number;
+  radiusChrome: number;
+  bevelWidth: number;
+  chromeBarHeight: number;
+  chromeDot: number;
   space: (n: number) => number;
   shadow: typeof tokens.shadow;
 }
@@ -126,6 +212,31 @@ function buildTheme(name: ThemeName): Theme {
 export function useTheme(): Theme {
   const name = useAppStore((s) => s.themeName);
   return useMemo(() => buildTheme(name), [name]);
+}
+
+export interface Retro extends Theme {
+  /** Beveled edge for the given variant, derived from the active palette. */
+  bevel: (variant?: BevelVariant) => BevelStyle;
+  /** Title-bar fill + text colors for window chrome. */
+  chromeBar: string;
+  chromeBarText: string;
+  /** Convenience alias for the mono chrome font. */
+  mono: string;
+}
+
+/** Theme + retro-chrome derivations. Use in retro components. */
+export function useRetro(): Retro {
+  const theme = useTheme();
+  return useMemo(() => {
+    const { colors, isDark } = theme;
+    return {
+      ...theme,
+      bevel: (variant: BevelVariant = 'raised') => bevel(colors, isDark, variant),
+      chromeBar: isDark ? colors.accent : colors.accentDeep,
+      chromeBarText: colors.onAccent,
+      mono: theme.fonts.mono,
+    };
+  }, [theme]);
 }
 
 /**

@@ -151,8 +151,8 @@ function PageImage({
       {rects?.map(([x0, y0, x1, y1], i) => (
         <View
           key={i}
-          pointerEvents="none"
           style={{
+            pointerEvents: 'none',
             position: 'absolute',
             left: x0 * width,
             top: y0 * height,

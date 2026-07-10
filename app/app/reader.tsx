@@ -5,10 +5,10 @@ import {
   FlatList,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
+  ViewStyle,
 } from 'react-native';
 
 // The PDF view (rendered page images) is a large-screen convenience — on mobile
@@ -17,21 +17,23 @@ const PDF_VIEW_ENABLED = Platform.OS === 'web';
 
 import { Chapter, DocumentT, PregenStatus, Voice } from '../src/api/types';
 import { PdfView } from '../src/components/PdfView';
+import { RetroChip, SegMeter, SegmentedControl } from '../src/components/retro';
 import { Muted } from '../src/components/ui';
 import { materialize } from '../src/player/offlineCache';
 import { useMediaSession } from '../src/player/useMediaSession';
 import { usePlayer } from '../src/player/usePlayer';
 import { NATURAL_VOICE_ID } from '../src/config';
+import { sfx } from '../src/sfx/sfx';
 import { useApi, useAppStore } from '../src/store/appStore';
-import { Palette, tokens, useTheme } from '../src/theme';
+import { bevel, mix, Palette, tokens, useTheme } from '../src/theme';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const api = useApi();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const { voice, lang, speed, setVoice, setSpeed, savePosition, positions } = useAppStore();
   const { controller, state } = usePlayer();
 
@@ -341,45 +343,34 @@ export default function ReaderScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={1}>
-          {doc.title}
-        </Text>
-        {doc.chapters.length > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-            <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
-              {doc.chapters.map((c, i) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => onSelectChapter(i)}
-                  style={[styles.chip, i === chapterIndex && styles.chipActive]}
-                >
-                  <Text
-                    style={[styles.chipText, i === chapterIndex && styles.chipTextActive]}
-                    numberOfLines={1}
-                  >
-                    {c.title || `Section ${i + 1}`}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        )}
+        <View style={styles.titleBar}>
+          <Text style={styles.title} numberOfLines={1}>
+            {doc.title}
+          </Text>
+        </View>
+        <View style={styles.headerBody}>
+          {doc.chapters.length > 1 && (
+            <SegmentedControl<number>
+              scroll
+              size="sm"
+              segments={doc.chapters.map((c, i) => ({ value: i, label: c.title || `Section ${i + 1}` }))}
+              value={chapterIndex}
+              onChange={onSelectChapter}
+            />
+          )}
 
-        {doc.has_pdf && PDF_VIEW_ENABLED && (
-          <View style={styles.viewToggle}>
-            {(['text', 'pdf'] as const).map((v) => (
-              <Pressable
-                key={v}
-                onPress={() => setView(v)}
-                style={[styles.toggleBtn, view === v && styles.toggleBtnOn]}
-              >
-                <Text style={[styles.toggleText, view === v && styles.toggleTextOn]}>
-                  {v === 'text' ? 'Text' : 'PDF'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+          {doc.has_pdf && PDF_VIEW_ENABLED && (
+            <SegmentedControl<'text' | 'pdf'>
+              segments={[
+                { value: 'text', label: 'Text' },
+                { value: 'pdf', label: 'PDF' },
+              ]}
+              value={view}
+              onChange={setView}
+              style={{ marginTop: 10 }}
+            />
+          )}
+        </View>
       </View>
 
       {doc.ocr_status === 'pending' ? (
@@ -400,7 +391,7 @@ export default function ReaderScreen() {
           ref={listRef}
           data={chapter.sentences}
           keyExtractor={(s) => String(s.index)}
-          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 220, flexGrow: 1 }}
+          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 250, flexGrow: 1 }}
           ListEmptyComponent={
             <View style={{ paddingVertical: tokens.space(10), alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>No readable text found</Text>
@@ -475,39 +466,45 @@ export default function ReaderScreen() {
                   : 'Caching this chapter for smooth playback…'}
                 {pregen.total ? ` ${Math.round((pregen.done / pregen.total) * 100)}%` : ''}
               </Muted>
-              <View style={styles.pregenTrack}>
-                <View
-                  style={[
-                    styles.pregenFill,
-                    { width: `${pregen.total ? (pregen.done / pregen.total) * 100 : 5}%` },
-                  ]}
-                />
-              </View>
+              <SegMeter
+                pct={pregen.total ? (pregen.done / pregen.total) * 100 : 5}
+                style={{ marginTop: 6 }}
+              />
             </View>
           </View>
         ) : null}
 
         {showVoices && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-            <View style={{ flexDirection: 'row', gap: tokens.space(2) }}>
-              {voices.map((v) => (
-                <Pressable
-                  key={v.id}
-                  onPress={() => onSelectVoice(v)}
-                  style={[styles.chip, voice === v.id && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, voice === v.id && styles.chipTextActive]}>
-                    {v.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
+          <SegmentedControl<string>
+            scroll
+            size="sm"
+            style={{ marginBottom: 10 }}
+            segments={voices.map((v) => ({ value: v.id, label: v.name }))}
+            value={voice}
+            onChange={(vid) => {
+              const v = voices.find((x) => x.id === vid);
+              if (v) onSelectVoice(v);
+            }}
+          />
         )}
 
         <View style={styles.transport}>
-          <TransportButton label="⏮" onPress={() => controller.prev()} color={colors.text} />
-          <Pressable onPress={onPlayPause} style={styles.playBtn}>
+          <TransportButton
+            label="⏮"
+            onPress={() => {
+              sfx.play('tap');
+              controller.prev();
+            }}
+            color={colors.text}
+            style={styles.transportBtn}
+          />
+          <Pressable
+            onPress={() => {
+              sfx.play('toggle');
+              onPlayPause();
+            }}
+            style={styles.playBtn}
+          >
             {loadingAudio || (isNatural && pregen?.status === 'generating') ? (
               <ActivityIndicator color={colors.onAccent} />
             ) : isNatural && !naturalReady ? (
@@ -517,37 +514,43 @@ export default function ReaderScreen() {
               <Text style={styles.playIcon}>{state.playing ? '❚❚' : '▶'}</Text>
             )}
           </Pressable>
-          <TransportButton label="⏭" onPress={() => controller.next()} color={colors.text} />
+          <TransportButton
+            label="⏭"
+            onPress={() => {
+              sfx.play('tap');
+              controller.next();
+            }}
+            color={colors.text}
+            style={styles.transportBtn}
+          />
         </View>
 
         <View style={styles.bottomRow}>
-          <Pressable
+          <RetroChip
+            label={`${speed}×`}
             onPress={() => {
               const i = SPEEDS.indexOf(speed);
               setSpeed(SPEEDS[(i + 1) % SPEEDS.length]);
             }}
-            style={styles.smallChip}
-          >
-            <Text style={styles.smallChipText}>{speed}×</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowVoices((s) => !s)} style={styles.smallChip}>
-            <Text style={styles.smallChipText}>
-              Voice: {voices.find((v) => v.id === voice)?.name ?? voice}
-            </Text>
-          </Pressable>
+          />
+          <RetroChip
+            label={`Voice: ${voices.find((v) => v.id === voice)?.name ?? voice}`}
+            active={showVoices}
+            onPress={() => setShowVoices((s) => !s)}
+          />
           {/* Prepare affordance only for the natural (GPU) voice — Kokoro plays live. */}
           {isNatural && pregen?.status === 'done' ? (
-            <View style={[styles.smallChip, { borderColor: colors.accent }]}>
-              <Text style={[styles.smallChipText, { color: colors.accent }]}>✓ Natural ready</Text>
-            </View>
+            <RetroChip label="✓ Natural ready" tone="accent" />
           ) : isNatural && pregen && pregen.status !== 'generating' ? (
-            <Pressable onPress={preparePregen} style={styles.smallChip}>
-              <Text style={styles.smallChipText}>
-                {pregen.status === 'failed'
+            <RetroChip
+              label={
+                pregen.status === 'failed'
                   ? '⚠ Retry natural'
-                  : `⬇ Prepare natural${pregen.status === 'partial' ? ' (resume)' : ''}`}
-              </Text>
-            </Pressable>
+                  : `⬇ Prepare natural${pregen.status === 'partial' ? ' (resume)' : ''}`
+              }
+              tone={pregen.status === 'failed' ? 'danger' : 'default'}
+              onPress={preparePregen}
+            />
           ) : null}
         </View>
       </View>
@@ -559,46 +562,50 @@ function TransportButton({
   label,
   onPress,
   color,
+  style,
 }: {
   label: string;
   onPress: () => void;
   color: string;
+  style?: ViewStyle;
 }) {
   return (
-    <Pressable onPress={onPress} style={{ padding: 10 }}>
-      <Text style={{ color, fontSize: 26 }}>{label}</Text>
+    <Pressable onPress={onPress} style={style}>
+      <Text style={{ color, fontSize: 24 }}>{label}</Text>
     </Pressable>
   );
 }
 
-const makeStyles = (c: Palette) =>
-  StyleSheet.create({
+const makeStyles = (c: Palette, isDark: boolean) => {
+  const bev = bevel(c, isDark, 'raised');
+  const bevBorder = {
+    borderTopColor: bev.borderTopColor,
+    borderLeftColor: bev.borderLeftColor,
+    borderBottomColor: bev.borderBottomColor,
+    borderRightColor: bev.borderRightColor,
+    borderWidth: tokens.bevelWidth,
+  };
+  const accentLight = mix(c.accent, '#FFFFFF', 0.18);
+  const accentShadow = mix(c.accent, '#000000', 0.22);
+  return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
-    header: {
+    header: { borderBottomWidth: 1, borderBottomColor: c.border },
+    titleBar: {
+      backgroundColor: isDark ? c.accent : c.accentDeep,
       paddingHorizontal: tokens.space(4),
-      paddingTop: tokens.space(3),
-      paddingBottom: tokens.space(2),
+      paddingVertical: 8,
       borderBottomWidth: 1,
-      borderBottomColor: c.border,
+      borderBottomColor: mix(isDark ? c.accent : c.accentDeep, '#000000', 0.25),
     },
-    title: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '700' },
-    viewToggle: {
-      flexDirection: 'row',
-      alignSelf: 'flex-start',
-      marginTop: 10,
-      padding: 3,
-      borderRadius: 999,
-      backgroundColor: c.surfaceAlt,
-      borderWidth: 1,
-      borderColor: c.border,
+    title: { fontFamily: tokens.fonts.mono, color: c.onAccent, fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+    headerBody: {
+      paddingHorizontal: tokens.space(4),
+      paddingTop: 10,
+      paddingBottom: tokens.space(2),
     },
-    toggleBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 999 },
-    toggleBtnOn: { backgroundColor: c.accent },
-    toggleText: { fontFamily: tokens.fonts.body, fontSize: 13, fontWeight: '600', color: c.textDim },
-    toggleTextOn: { color: c.onAccent },
     emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3 },
-    emptyBtn: { backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radius },
+    emptyBtn: { backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radiusChrome },
     emptyBtnGhost: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
     emptyBtnText: { fontFamily: tokens.fonts.body, color: c.onAccent, fontSize: 15, fontWeight: '600' },
     ocrBanner: {
@@ -616,11 +623,11 @@ const makeStyles = (c: Palette) =>
       marginBottom: 10,
       paddingVertical: 8,
       paddingHorizontal: 12,
-      borderRadius: tokens.radiusSm,
+      borderRadius: tokens.radiusChrome,
       backgroundColor: c.accentSoft,
     },
-    pregenTrack: { height: 4, borderRadius: 2, backgroundColor: c.surface, marginTop: 6, overflow: 'hidden' },
-    pregenFill: { height: 4, backgroundColor: c.accent },
+    // Reading surface stays calm: color/background/weight only — identical box
+    // metrics to inactive so activation never changes row height (keeps auto-scroll aligned).
     sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
     sentenceActive: {
       color: c.text,
@@ -633,10 +640,14 @@ const makeStyles = (c: Palette) =>
       right: 0,
       bottom: 0,
       backgroundColor: c.surface,
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-      borderTopLeftRadius: tokens.radius,
-      borderTopRightRadius: tokens.radius,
+      borderTopColor: bev.borderTopColor,
+      borderLeftColor: bev.borderLeftColor,
+      borderRightColor: bev.borderRightColor,
+      borderTopWidth: tokens.bevelWidth,
+      borderLeftWidth: tokens.bevelWidth,
+      borderRightWidth: tokens.bevelWidth,
+      borderTopLeftRadius: tokens.radiusChrome,
+      borderTopRightRadius: tokens.radiusChrome,
       padding: tokens.space(4),
       paddingBottom: tokens.space(6),
       shadowColor: '#363E28',
@@ -646,13 +657,27 @@ const makeStyles = (c: Palette) =>
       elevation: 12,
     },
     transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(6) },
+    transportBtn: {
+      width: 52,
+      height: 52,
+      borderRadius: tokens.radiusChrome,
+      backgroundColor: c.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...bevBorder,
+    },
     playBtn: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: tokens.radiusChrome,
       backgroundColor: c.accent,
       alignItems: 'center',
       justifyContent: 'center',
+      borderWidth: tokens.bevelWidth,
+      borderTopColor: accentLight,
+      borderLeftColor: accentLight,
+      borderBottomColor: accentShadow,
+      borderRightColor: accentShadow,
       shadowColor: '#363E28',
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.4,
@@ -660,26 +685,6 @@ const makeStyles = (c: Palette) =>
       elevation: 6,
     },
     playIcon: { color: c.onAccent, fontSize: 22, fontWeight: '800' },
-    bottomRow: { flexDirection: 'row', justifyContent: 'center', gap: tokens.space(3), marginTop: 14 },
-    smallChip: {
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surfaceAlt,
-    },
-    smallChipText: { fontFamily: tokens.fonts.body, color: c.text, fontSize: 13, fontWeight: '600' },
-    chip: {
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surfaceAlt,
-      maxWidth: 200,
-    },
-    chipActive: { backgroundColor: c.accentSoft, borderColor: c.accent },
-    chipText: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 13, fontWeight: '600' },
-    chipTextActive: { color: c.text },
+    bottomRow: { flexDirection: 'row', justifyContent: 'center', gap: tokens.space(3), marginTop: 14, flexWrap: 'wrap' },
   });
+};

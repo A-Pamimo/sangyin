@@ -69,11 +69,17 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'sangyin-app',
+      version: 1,
+      migrate: (persisted: any, version: number) => {
+        if (version < 1) {
+          // Upgrade any localhost URL to the real backend baked in at build time.
+          if (!persisted.backendUrl || /localhost|127\.0\.0\.1/.test(persisted.backendUrl)) {
+            persisted.backendUrl = DEFAULT_BACKEND_URL;
+          }
+        }
+        return persisted;
+      },
       storage: createJSONStorage(() => AsyncStorage),
-      // Persist only durable preferences. `bootSeen` is intentionally omitted so
-      // it resets to `false` on every cold start (intro once per launch). No
-      // `version`/`migrate` here: the default shallow merge keeps initializer
-      // defaults for the new keys and preserves existing stored state.
       partialize: (s) => ({
         backendUrl: s.backendUrl,
         voice: s.voice,

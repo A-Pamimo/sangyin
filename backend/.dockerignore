@@ -1,0 +1,11 @@
+# Keep the build context tiny — never ship the venvs (multi-GB) or caches.
+.venv/
+.venv-chatterbox/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+tests/
+scripts/
+DEPLOY.md

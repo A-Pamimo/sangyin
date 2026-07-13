@@ -20,6 +20,10 @@ export interface DocumentT {
   source_type: SourceType;
   chapters: Chapter[];
   created_at: string;
+  /** True when the original PDF is stored and can be shown in the reader's PDF view. */
+  has_pdf?: boolean;
+  /** Background OCR state for scanned PDFs: none | pending | done | failed | unavailable. */
+  ocr_status?: 'none' | 'pending' | 'done' | 'failed' | 'unavailable';
 }
 
 export interface DocumentSummary {
@@ -57,6 +61,22 @@ export interface AudioChunk {
   sample_rate: number;
   duration_sec: number;
   audio_b64: string;
+  // Terminal marker on the natural-voice stream: some phrases aren't cached yet, so
+  // the client should run "prepare". Present only on the marker line (no audio).
+  needs_prepare?: boolean;
+}
+
+/** A sentence's location on the PDF: its page and per-line rects (normalized 0-1). */
+export interface PdfHighlight {
+  page: number;
+  rects: number[][];
+}
+
+/** Progress of background pre-generation for a (document, chapter, voice). */
+export interface PregenStatus {
+  total: number;
+  done: number;
+  status: 'idle' | 'partial' | 'generating' | 'done' | 'failed';
 }
 
 export interface TTSRequestBody {

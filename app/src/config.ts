@@ -9,3 +9,6 @@ export const DEFAULT_BACKEND_URL =
 
 export const DEFAULT_VOICE = 'af_heart';
 export const DEFAULT_LANG = 'a';
+// The one opt-in natural (GPU) voice. Selecting it makes playback prepare-first:
+// the app caches the chapter once, then plays from cache — no live GPU streaming.
+export const NATURAL_VOICE_ID = 'natural';

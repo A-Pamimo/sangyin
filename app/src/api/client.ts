@@ -3,6 +3,8 @@ import {
   AudioChunk,
   DocumentSummary,
   DocumentT,
+  PdfHighlight,
+  PregenStatus,
   TTSRequestBody,
   Voice,
 } from './types';
@@ -40,6 +42,56 @@ export class ApiClient {
     return res.json();
   }
 
+  /** Absolute URL of a document's stored original file (PDF) — "open original" link. */
+  documentFileUrl(id: string): string {
+    return this.url(`/documents/${id}/file`);
+  }
+
+  /** Number of pages in the stored PDF (the reader renders each as an image). */
+  async pdfPageCount(id: string): Promise<number> {
+    const res = await fetch(this.url(`/documents/${id}/pdf/pages`));
+    if (!res.ok) throw new ApiError(`Could not read PDF (${res.status})`);
+    return (await res.json()).pages ?? 0;
+  }
+
+  /** Absolute URL of a single rendered PDF page image. */
+  documentPageUrl(id: string, page: number): string {
+    return this.url(`/documents/${id}/pdf/page/${page}`);
+  }
+
+  /** Per-sentence bounding boxes on the PDF pages, for on-page highlighting. */
+  async pdfHighlights(id: string): Promise<Record<number, PdfHighlight>> {
+    const res = await fetch(this.url(`/documents/${id}/pdf/highlights`));
+    if (!res.ok) throw new ApiError(`Could not load highlights (${res.status})`);
+    return (await res.json()).highlights ?? {};
+  }
+
+  /** Kick off (or retry) background OCR for a scanned PDF. */
+  async startOcr(id: string): Promise<{ status: string }> {
+    const res = await fetch(this.url(`/documents/${id}/ocr`), { method: 'POST' });
+    if (!res.ok) throw new ApiError(await this.errorDetail(res));
+    return res.json();
+  }
+
+  /** Start background pre-generation of a chapter's audio (for slow/premium voices). */
+  async pregenerate(body: TTSRequestBody): Promise<PregenStatus> {
+    const res = await fetch(this.url('/tts/pregenerate'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new ApiError(await this.errorDetail(res));
+    return res.json();
+  }
+
+  /** Poll pre-generation progress for a (document, chapter, voice). */
+  async pregenerateStatus(documentId: string, chapterId: string, voice: string): Promise<PregenStatus> {
+    const q = new URLSearchParams({ document_id: documentId, chapter_id: chapterId, voice });
+    const res = await fetch(this.url(`/tts/pregenerate/status?${q.toString()}`));
+    if (!res.ok) throw new ApiError(`Pre-generation status failed (${res.status})`);
+    return res.json();
+  }
+
   async deleteDocument(id: string): Promise<boolean> {
     const res = await fetch(this.url(`/documents/${id}`), { method: 'DELETE' });
     return res.ok;
@@ -53,10 +105,12 @@ export class ApiClient {
     return this.postJson('/documents/url', { url });
   }
 
-  async importFile(file: { uri: string; name: string; mimeType?: string }): Promise<DocumentT> {
+  async importFile(file: { uri: string; name: string; mimeType?: string; webFile?: any }): Promise<DocumentT> {
     const form = new FormData();
 
-    if (Platform.OS === 'web') {
+    if (file.webFile) {
+      form.append('file', file.webFile);
+    } else if (Platform.OS === 'web') {
       const response = await fetch(file.uri);
       const blob = await response.blob();
       form.append('file', blob, file.name);

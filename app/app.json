@@ -11,20 +11,23 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f1115"
+      "backgroundColor": "#ECEBE0"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sangyin.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.sangyin.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0f1115"
+        "backgroundColor": "#ECEBE0"
       }
     },
     "web": {
@@ -32,9 +35,18 @@
       "output": "single",
       "favicon": "./assets/icon.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5d861a96-a691-461d-aae9-c25844dea0c0"
+      }
+    },
+    "owner": "watermap"
   }
 }

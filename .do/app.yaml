@@ -1,0 +1,54 @@
+# DigitalOcean App Platform spec.
+#
+# As written this deploys a WORKING API out of the box: fast Kokoro voice on CPU,
+# ephemeral local storage. Create it with:
+#   doctl apps create --spec .do/app.yaml
+# (or dashboard: Create App -> this repo -> it uses this spec).
+#
+# Then upgrade with env vars (dashboard, or `doctl apps update <id> --spec ...`):
+#   Natural voice  -> deploy backend/modal_chatterbox.py, then set
+#                     SANGYIN_TTS_ENGINE=chatterbox
+#                     SANGYIN_CHATTERBOX_URL=https://<you>--sangyin-chatterbox-web.modal.run
+#   Persistent R2  -> App Platform disk is ephemeral, so for real use set
+#                     SANGYIN_R2_ACCOUNT_ID / SANGYIN_R2_BUCKET /
+#                     SANGYIN_R2_ACCESS_KEY / SANGYIN_R2_SECRET_KEY (keys as SECRET)
+name: sangyin-backend
+region: nyc
+services:
+  - name: api
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile  # forces a Docker build, not the Python buildpack
+    github:
+      repo: A-Pamimo/sangyin
+      branch: claude/ios-eas-setup
+      deploy_on_push: true
+    http_port: 8080
+    # Kokoro needs ~2 GB. If doctl rejects this slug, run
+    #   doctl apps tier instance-size list
+    # and pick a ~2 GB one.
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      - key: SANGYIN_CORS_ORIGINS
+        value: "*"
+      # Default engine = Kokoro (CPU, free, live). The natural voice (Chatterbox on
+      # Modal's serverless GPU) is opt-in: a request for the `natural` voice routes to
+      # the GPU, and only via explicit per-chapter pre-generation — never live — so the
+      # GPU runs only when the user asks and then plays from cache.
+      - key: SANGYIN_TTS_ENGINE
+        value: kokoro
+      - key: SANGYIN_CHATTERBOX_URL
+        value: https://a-pamimo--sangyin-chatterbox-web.modal.run
+      # Persistent storage: DigitalOcean Spaces (S3-compatible). App Platform's disk
+      # is ephemeral, so documents + cached audio live here instead. The two secret
+      # keys are set as ENCRYPTED env vars on the app (not committed to git); mint with:
+      #   doctl spaces keys create sangyin-backend --grants 'bucket=;permission=fullaccess'
+      - key: SANGYIN_S3_ENDPOINT
+        value: https://nyc3.digitaloceanspaces.com
+      - key: SANGYIN_S3_REGION
+        value: nyc3
+      - key: SANGYIN_S3_BUCKET
+        value: sangyin
+      # SANGYIN_S3_ACCESS_KEY / SANGYIN_S3_SECRET_KEY  -> set as SECRET (see command above)

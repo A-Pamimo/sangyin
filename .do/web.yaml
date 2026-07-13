@@ -1,0 +1,23 @@
+# DigitalOcean App Platform spec for the Sangyin web app (static site, free tier).
+# Builds the Expo web export on DO from the GitHub repo and serves it at its own
+# HTTPS URL. The backend URL is baked in at build time (EXPO_PUBLIC_BACKEND_URL).
+#
+#   doctl apps create --spec .do/web.yaml
+#
+# Auto-redeploys on push to the branch below.
+name: sangyin-web
+region: nyc
+static_sites:
+  - name: web
+    source_dir: app
+    github:
+      repo: A-Pamimo/sangyin
+      branch: claude/ios-eas-setup
+      deploy_on_push: true
+    build_command: npx expo export --platform web
+    output_dir: dist
+    catchall_document: index.html   # SPA: unknown paths fall back to the app shell
+    envs:
+      - key: EXPO_PUBLIC_BACKEND_URL
+        value: https://sangyin-backend-inwls.ondigitalocean.app
+        scope: BUILD_TIME

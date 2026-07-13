@@ -21,10 +21,21 @@ class Settings(BaseSettings):
     # Comma-separated list, or "*" for any origin (default is permissive for self-host).
     cors_origins: str = "*"
 
-    # TTS
+    # TTS. The default engine serves everyday voices live (Kokoro = CPU, free). The
+    # natural neural voice (Chatterbox) is a paid GPU and is opt-in: a request for the
+    # `natural_voice_id` routes to `natural_engine`, and only via explicit pre-generation
+    # (never live streaming), so the GPU runs only when the user deliberately asks.
     tts_engine: str = "kokoro"
     default_voice: str = "af_heart"
     default_lang_code: str = "a"
+    natural_voice_id: str = "natural"
+    natural_engine: str = "chatterbox"
+    # Chatterbox (natural neural voice) runs as a separate GPU process (local sidecar
+    # or Modal); this is where the main backend reaches it. See backend/tts_sidecar.py.
+    chatterbox_url: str = "http://127.0.0.1:8091"
+    # How many phrases to pre-generate at once. Kept at 1 so a paid GPU can't fan out
+    # into several billed containers from a single prepare.
+    pregen_concurrency: int = 1
 
     # Hardening (all optional; safe defaults for personal self-host)
     # If set, every endpoint except /health requires this key via the X-API-Key header.
@@ -32,8 +43,29 @@ class Settings(BaseSettings):
     # Reject uploads larger than this many megabytes.
     max_upload_mb: int = 50
 
+    # OCR for scanned / image-only PDFs (no extractable text). Runs in the
+    # background after import; Tesseract is used when available, else a pip-only
+    # fallback. Set ocr_enabled=false to disable entirely.
+    ocr_enabled: bool = True
+    ocr_max_pages: int = 50
+    ocr_dpi: int = 200
+
     # Storage / cache (documents + generated audio)
     data_dir: Path = Path.home() / ".sangyin"
+    # Generic S3-compatible object storage for cloud deploys — e.g. DigitalOcean
+    # Spaces. When endpoint + bucket + keys are all set, blobs (documents, audio,
+    # originals) go here instead of local files under data_dir. Takes priority over R2.
+    s3_endpoint: str = ""  # e.g. https://nyc3.digitaloceanspaces.com
+    s3_region: str = "us-east-1"  # Spaces: the region slug, e.g. nyc3
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = ""
+    # Cloudflare R2 (also S3-compatible). Used when the generic S3 vars above are
+    # unset but all four of these are set; the endpoint is derived from the account id.
+    r2_account_id: str = ""
+    r2_access_key: str = ""
+    r2_secret_key: str = ""
+    r2_bucket: str = ""
 
     @property
     def documents_dir(self) -> Path:
@@ -42,6 +74,10 @@ class Settings(BaseSettings):
     @property
     def audio_cache_dir(self) -> Path:
         return self.data_dir / "audio"
+
+    @property
+    def originals_dir(self) -> Path:
+        return self.data_dir / "originals"
 
     @property
     def cors_origin_list(self) -> list[str]:

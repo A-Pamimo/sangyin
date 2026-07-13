@@ -1,46 +1,67 @@
-"""On-disk persistence for parsed documents and generated audio.
+"""Persistence for parsed documents and generated audio.
 
-Documents are stored as JSON (one file per document). Generated audio chunks are cached
-per (document, chapter, voice, sentence index) so repeat playback — and mobile offline
-playback — does not re-run the model. The store is intentionally file-based so the
-backend stays trivially self-hostable with no external database.
+Everything is stored as keyed blobs (see ``blobs.py``): documents as JSON, audio
+clips per (document, chapter, voice, sentence index) so repeat/offline playback
+doesn't re-run the model, plus original PDFs and OCR word boxes. The blob backend
+is local files by default (trivially self-hostable) or Cloudflare R2 for cloud
+deploys — this class doesn't care which.
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
+from .blobs import BlobStore, make_blob_store, read_json
 from .config import get_settings
 from .models import Document, DocumentSummary
 
 
 class DocumentStore:
-    def __init__(self, documents_dir: Path, audio_dir: Path) -> None:
-        self.documents_dir = documents_dir
-        self.audio_dir = audio_dir
-        self.documents_dir.mkdir(parents=True, exist_ok=True)
-        self.audio_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, blobs: BlobStore) -> None:
+        self.blobs = blobs
+
+    # ---- keys ---------------------------------------------------------------
+
+    @staticmethod
+    def _doc_key(doc_id: str) -> str:
+        return f"documents/{doc_id}.json"
+
+    @staticmethod
+    def _audio_key(doc_id: str, chapter_id: str, voice: str, index: int, ext: str = "wav") -> str:
+        return f"audio/{doc_id}/{chapter_id}/{voice}/{index}.{ext}"
+
+    @staticmethod
+    def _original_key(doc_id: str) -> str:
+        return f"originals/{doc_id}.pdf"
+
+    @staticmethod
+    def _ocr_words_key(doc_id: str) -> str:
+        return f"originals/{doc_id}.words.json"
 
     # ---- documents ----------------------------------------------------------
 
-    def _doc_path(self, doc_id: str) -> Path:
-        return self.documents_dir / f"{doc_id}.json"
-
     def save(self, doc: Document) -> None:
-        self._doc_path(doc.id).write_text(doc.model_dump_json(), encoding="utf-8")
+        self.blobs.write(self._doc_key(doc.id), doc.model_dump_json().encode("utf-8"))
 
     def get(self, doc_id: str) -> Document | None:
-        path = self._doc_path(doc_id)
-        if not path.exists():
+        data = self.blobs.read(self._doc_key(doc_id))
+        if data is None:
             return None
-        return Document.model_validate_json(path.read_text(encoding="utf-8"))
+        try:
+            return Document.model_validate_json(data)
+        except Exception:
+            return None
 
     def list(self) -> list[DocumentSummary]:
         summaries: list[DocumentSummary] = []
-        for path in self.documents_dir.glob("*.json"):
+        for key in self.blobs.list("documents/"):
+            if not key.endswith(".json"):
+                continue
+            data = self.blobs.read(key)
+            if data is None:
+                continue
             try:
-                doc = Document.model_validate_json(path.read_text(encoding="utf-8"))
+                doc = Document.model_validate_json(data)
             except Exception:
                 continue
             summaries.append(
@@ -56,34 +77,52 @@ class DocumentStore:
         return summaries
 
     def delete(self, doc_id: str) -> bool:
-        path = self._doc_path(doc_id)
-        existed = path.exists()
-        path.unlink(missing_ok=True)
-        # Drop any cached audio for this document.
-        doc_audio = self.audio_dir / doc_id
-        if doc_audio.exists():
-            for f in doc_audio.rglob("*"):
-                if f.is_file():
-                    f.unlink(missing_ok=True)
+        existed = self.blobs.exists(self._doc_key(doc_id))
+        self.blobs.delete(self._doc_key(doc_id))
+        self.blobs.delete_prefix(f"audio/{doc_id}/")
+        self.blobs.delete(self._original_key(doc_id))
+        self.blobs.delete(self._ocr_words_key(doc_id))
         return existed
+
+    # ---- original files (for the reader's PDF view) -------------------------
+
+    def save_original_pdf(self, doc_id: str, content: bytes) -> None:
+        self.blobs.write(self._original_key(doc_id), content)
+
+    def read_original_pdf(self, doc_id: str) -> bytes | None:
+        return self.blobs.read(self._original_key(doc_id))
+
+    # Per-page OCR word boxes (for on-page sentence highlighting of scanned PDFs).
+    def write_ocr_words(self, doc_id: str, data: dict) -> None:
+        self.blobs.write(self._ocr_words_key(doc_id), json.dumps(data).encode("utf-8"))
+
+    def read_ocr_words(self, doc_id: str) -> dict | None:
+        return read_json(self.blobs, self._ocr_words_key(doc_id))
 
     # ---- audio cache --------------------------------------------------------
 
-    def audio_chunk_path(self, doc_id: str, chapter_id: str, voice: str, index: int) -> Path:
-        return self.audio_dir / doc_id / chapter_id / voice / f"{index}.wav"
-
     def read_cached_chunk(self, doc_id: str, chapter_id: str, voice: str, index: int) -> bytes | None:
-        path = self.audio_chunk_path(doc_id, chapter_id, voice, index)
-        if path.exists():
-            return path.read_bytes()
-        return None
+        return self.blobs.read(self._audio_key(doc_id, chapter_id, voice, index))
 
     def write_cached_chunk(
         self, doc_id: str, chapter_id: str, voice: str, index: int, wav_bytes: bytes
     ) -> None:
-        path = self.audio_chunk_path(doc_id, chapter_id, voice, index)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(wav_bytes)
+        self.blobs.write(self._audio_key(doc_id, chapter_id, voice, index), wav_bytes)
+
+    # Sidecar JSON holding per-sentence timing for a cached phrase clip, so replays
+    # keep the accurate (word-timestamp-derived) highlight offsets without re-synth.
+    def read_cached_meta(
+        self, doc_id: str, chapter_id: str, voice: str, index: int
+    ) -> dict | None:
+        return read_json(self.blobs, self._audio_key(doc_id, chapter_id, voice, index, "json"))
+
+    def write_cached_meta(
+        self, doc_id: str, chapter_id: str, voice: str, index: int, meta: dict
+    ) -> None:
+        self.blobs.write(
+            self._audio_key(doc_id, chapter_id, voice, index, "json"),
+            json.dumps(meta).encode("utf-8"),
+        )
 
 
 _store: DocumentStore | None = None
@@ -92,6 +131,5 @@ _store: DocumentStore | None = None
 def get_store() -> DocumentStore:
     global _store
     if _store is None:
-        settings = get_settings()
-        _store = DocumentStore(settings.documents_dir, settings.audio_cache_dir)
+        _store = DocumentStore(make_blob_store(get_settings()))
     return _store

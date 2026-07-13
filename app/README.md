@@ -3,6 +3,9 @@
 The Sangyin client — one Expo / React Native codebase that runs on **web**, **iOS**,
 and **Android**, talking to a [Sangyin backend](../backend/README.md) over its REST API.
 
+> **Hosted app:** https://sangyin-web-m5khb.ondigitalocean.app — a live web build,
+> already wired to the hosted backend. The steps below are for running it yourself.
+
 ## Prerequisites
 
 - Node.js 18+ and npm
@@ -41,6 +44,25 @@ npm run android
 When testing on a physical device, the backend must be reachable from the phone — use
 your computer's LAN IP (e.g. `http://192.168.1.20:8000`), not `localhost`, in Settings.
 
+## Deploy the web app
+
+The web app builds to a static site (`app.json` sets `web.output: "single"`), so it
+can be hosted anywhere. Bake the backend URL in at build time:
+
+```bash
+EXPO_PUBLIC_BACKEND_URL=https://your-backend npx expo export --platform web
+# → serves from ./dist  (index.html + a single JS bundle)
+```
+
+The repo ships a DigitalOcean static-site spec — [`.do/web.yaml`](../.do/web.yaml) —
+that builds this on push and serves it at its own HTTPS URL:
+
+```bash
+doctl apps create --spec .do/web.yaml
+```
+
+`.node-version` pins the Node used for the cloud build.
+
 ## Build for the stores (EAS)
 
 ```bash
@@ -61,7 +83,9 @@ run from any OS via EAS cloud builders.
 app/
 ├── app/                 expo-router screens
 │   ├── _layout.tsx      navigation stack
-│   ├── index.tsx        Library
+│   ├── +html.tsx        web document shell
+│   ├── index.tsx        Landing (immersive scroll + how-to-use guide)
+│   ├── library.tsx      Document library
 │   ├── import.tsx       Import (paste / URL / file)
 │   ├── reader.tsx       Reader + player (streaming, highlighting, transport)
 │   └── settings.tsx     Backend URL, voice, default speed

@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 
 SourceType = Literal["pdf", "epub", "docx", "txt", "text", "url"]
 
+# Background-OCR state for scanned PDFs: none = not applicable / had text already,
+# pending = OCR running, done = text filled in, failed = OCR produced nothing,
+# unavailable = no OCR engine installed.
+OcrStatus = Literal["none", "pending", "done", "failed", "unavailable"]
+
 
 class Sentence(BaseModel):
     index: int  # global, document-wide index (stable across chapters)
@@ -27,6 +32,11 @@ class Document(BaseModel):
     source_type: SourceType
     chapters: list[Chapter]
     created_at: str  # ISO 8601
+    # True when the original PDF was stored and can be served at /documents/{id}/file
+    # (lets the reader offer a "PDF" view alongside the narrated text).
+    has_pdf: bool = False
+    # Background OCR state (for scanned/image PDFs with no extractable text).
+    ocr_status: OcrStatus = "none"
 
     @property
     def n_sentences(self) -> int:

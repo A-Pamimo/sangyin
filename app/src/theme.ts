@@ -31,13 +31,13 @@ export const palettes: Record<ThemeName, Palette> = {
     bgAlt: '#E4E2D4',
     surface: '#FFFFFF',
     surfaceAlt: '#F4F3EA',
-    border: 'rgba(35, 39, 29, 0.10)',
+    border: 'rgba(35, 39, 29, 0.12)',
     text: '#23271D',
     textDim: '#4E543F',
     faint: '#8B917C',
     accent: '#5F6B44',
     accentDeep: '#414A32',
-    accentSoft: '#EAECDF',
+    accentSoft: 'rgba(95, 107, 68, 0.1)',
     warm: '#C79E6B',
     onAccent: '#ECEBE0',
     danger: '#B15238',
@@ -47,13 +47,13 @@ export const palettes: Record<ThemeName, Palette> = {
     bgAlt: '#EDE1CE',
     surface: '#FFFDF8',
     surfaceAlt: '#FAF3E7',
-    border: 'rgba(60, 30, 10, 0.10)',
+    border: 'rgba(60, 30, 10, 0.08)',
     text: '#2B2721',
     textDim: '#5C5347',
     faint: '#A2917C',
     accent: '#B15238',
     accentDeep: '#8A4630',
-    accentSoft: '#F1E1D2',
+    accentSoft: 'rgba(177, 82, 56, 0.1)',
     warm: '#C79E6B',
     onAccent: '#F7EFE3',
     danger: '#8A4630',
@@ -63,13 +63,13 @@ export const palettes: Record<ThemeName, Palette> = {
     bgAlt: '#181209',
     surface: '#2C231A',
     surfaceAlt: '#241C13',
-    border: 'rgba(255, 255, 255, 0.10)',
+    border: 'rgba(255, 255, 255, 0.08)',
     text: '#EFE6D6',
     textDim: '#C6B79E',
     faint: '#8C7C63',
     accent: '#CE9A4E',
     accentDeep: '#B4552F',
-    accentSoft: '#382B1E',
+    accentSoft: 'rgba(206, 154, 78, 0.15)',
     warm: '#B4552F',
     onAccent: '#201A14',
     danger: '#CD7A54',
@@ -91,11 +91,8 @@ export const THEME_LABELS: { name: ThemeName; label: string }[] = [
 // Non-color tokens — identical across every theme.
 export const tokens = {
   fonts: {
-    // Loaded on web via app/+html.tsx; falls back to the system font on native.
     display: "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif",
     body: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    // Retro "system chrome" face — window titles, tickers, tags only (never body).
-    // Space Mono is web-loaded; native uses a real platform monospace.
     mono: Platform.select({
       web: "'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
       ios: 'Menlo',
@@ -103,34 +100,45 @@ export const tokens = {
       default: 'monospace',
     }) as string,
   },
-  radius: 16,
+  radius: 24,
   radiusSm: 12,
-  // Retro window chrome: squarer corners dodge the native per-side-border + radius
-  // fallback bug, and a 2px bevel reads as an "OS window" edge.
-  radiusChrome: 2,
-  bevelWidth: 2,
-  chromeBarHeight: 28,
+  radiusChrome: 16, // More rounded for modern tactile feel
+  bevelWidth: 1, // Kept for subtle highlighting, not chunky retro bevels
+  chromeBarHeight: 44, // Taller, more modern header
   chromeDot: 10,
   space: (n: number) => n * 4,
-  // Soft, warm elevation for cards (iOS shadow* + Android elevation + web boxShadow).
+  // Four-tier semantic shadow system (sm → xl)
+  shadows: {
+    sm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 },  shadowOpacity: 0.06, shadowRadius: 4,  elevation: 2 },
+    md: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 },  shadowOpacity: 0.11, shadowRadius: 12, elevation: 4 },
+    lg: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 },  shadowOpacity: 0.16, shadowRadius: 22, elevation: 8 },
+    xl: { shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.20, shadowRadius: 40, elevation: 12 },
+  },
+  // Back-compat aliases
   shadow: {
-    shadowColor: '#363E28',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.20,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  shadowRaised: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.11,
+    shadowRadius: 12,
     elevation: 4,
+  },
+  // Semantic letter-spacing tokens (px at typical display sizes)
+  tracking: {
+    tight:  -2,   // display headings
+    snug:   -1,   // subheadings
+    normal:  0,
+    wide:    0.5, // body labels
+    wider:   1.2, // monospace caps
   },
 } as const;
 
-// ---------------------------------------------------------------------------
-// Retro bevel system. Because React Native on iOS/Android collapses per-side
-// border colors to a uniform border once a borderRadius is set, we cannot lean
-// on translucent per-side borders. Instead we precompute OPAQUE edge colors by
-// mixing the face toward white/black, and keep chrome nearly square (radius 2)
-// so web and native render pixel-identically.
-// ---------------------------------------------------------------------------
-
-/** Parse #rgb / #rrggbb / rgb(...) to [r,g,b]. Falls back to mid-grey on miss. */
 function toRgb(color: string): [number, number, number] {
   const hex = color.trim();
   if (hex[0] === '#') {
@@ -147,7 +155,6 @@ function toRgb(color: string): [number, number, number] {
   return [128, 128, 128];
 }
 
-/** Per-channel lerp between two colors → an opaque `rgb(...)` string. */
 export function mix(base: string, target: string, t: number): string {
   const [r1, g1, b1] = toRgb(base);
   const [r2, g2, b2] = toRgb(target);
@@ -167,15 +174,11 @@ export interface BevelStyle {
   borderRadius: number;
 }
 
-/**
- * Beveled edge for retro chrome. `raised` = light top/left + shadow bottom/right;
- * `inset` swaps them (pressed / sunk wells). Derived from palette tokens so it
- * reads correctly on Sage/Clay (light) and Loam (dark).
- */
+// Updated bevel logic for Premium Tactile (soft inner light, no harsh dark bevels)
 export function bevel(colors: Palette, isDark: boolean, variant: BevelVariant = 'raised'): BevelStyle {
-  const face = variant === 'inset' ? colors.surfaceAlt : isDark ? colors.surface : colors.surfaceAlt;
-  const edgeLight = mix(face, '#FFFFFF', isDark ? 0.16 : 0.1);
-  const edgeShadow = mix(face, '#000000', isDark ? 0.42 : 0.16);
+  const face = variant === 'inset' ? colors.surfaceAlt : colors.surface;
+  const edgeLight = mix(face, '#FFFFFF', isDark ? 0.08 : 0.4);
+  const edgeShadow = mix(face, '#000000', isDark ? 0.3 : 0.05);
   const tl = variant === 'inset' ? edgeShadow : edgeLight;
   const br = variant === 'inset' ? edgeLight : edgeShadow;
   return {
@@ -201,30 +204,28 @@ export interface Theme {
   chromeBarHeight: number;
   chromeDot: number;
   space: (n: number) => number;
+  shadows: typeof tokens.shadows;
   shadow: typeof tokens.shadow;
+  shadowRaised: typeof tokens.shadowRaised;
+  tracking: typeof tokens.tracking;
 }
 
 function buildTheme(name: ThemeName): Theme {
   return { name, colors: palettes[name], isDark: THEME_IS_DARK[name], ...tokens };
 }
 
-/** Reactive theme bound to the persisted user selection. Use inside components. */
 export function useTheme(): Theme {
   const name = useAppStore((s) => s.themeName);
   return useMemo(() => buildTheme(name), [name]);
 }
 
 export interface Retro extends Theme {
-  /** Beveled edge for the given variant, derived from the active palette. */
   bevel: (variant?: BevelVariant) => BevelStyle;
-  /** Title-bar fill + text colors for window chrome. */
   chromeBar: string;
   chromeBarText: string;
-  /** Convenience alias for the mono chrome font. */
   mono: string;
 }
 
-/** Theme + retro-chrome derivations. Use in retro components. */
 export function useRetro(): Retro {
   const theme = useTheme();
   return useMemo(() => {
@@ -232,15 +233,11 @@ export function useRetro(): Retro {
     return {
       ...theme,
       bevel: (variant: BevelVariant = 'raised') => bevel(colors, isDark, variant),
-      chromeBar: isDark ? colors.accent : colors.accentDeep,
-      chromeBarText: colors.onAccent,
+      chromeBar: isDark ? mix(colors.surface, '#000', 0.2) : mix(colors.surface, '#fff', 0.5),
+      chromeBarText: colors.text,
       mono: theme.fonts.mono,
     };
   }, [theme]);
 }
 
-/**
- * Static default (Sage). Safe for non-component code and module-scope defaults;
- * components should call useTheme() so they react to theme changes.
- */
 export const theme = buildTheme('sage');

@@ -9,40 +9,42 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { DocumentSummary } from '../src/api/types';
 import { Muted, Screen } from '../src/components/ui';
 import { BevelButton, Window } from '../src/components/retro';
 import { sfx } from '../src/sfx/sfx';
 import { useApi, useAppStore } from '../src/store/appStore';
-import { Palette, tokens, useRetro } from '../src/theme';
+import { Palette, tokens, useRetro, useTheme } from '../src/theme';
 
 const SOURCE_LABEL: Record<string, string> = {
   pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', txt: 'TXT', text: 'PASTE', url: 'WEB',
 };
 
-// Earthy spine colours — a real shelf is many muted volumes, not one hue.
+// Premium earthy spine colours (more sophisticated shades)
 const SPINES: { bg: string; ink: string }[] = [
-  { bg: '#5F6B44', ink: '#ECEBE0' },
-  { bg: '#8A4630', ink: '#F7EFE3' },
-  { bg: '#414A32', ink: '#ECEBE0' },
-  { bg: '#7C6A55', ink: '#F4EFE6' },
-  { bg: '#556052', ink: '#ECEBE0' },
-  { bg: '#9A5B3F', ink: '#F7EFE3' },
-  { bg: '#6B5B4A', ink: '#ECEBE0' },
-  { bg: '#8A6D3B', ink: '#F7EFE3' },
+  { bg: '#5F6B44', ink: '#FFFFFF' },
+  { bg: '#8A4630', ink: '#FFFFFF' },
+  { bg: '#4A5439', ink: '#FFFFFF' },
+  { bg: '#8B7A66', ink: '#FFFFFF' },
+  { bg: '#556052', ink: '#FFFFFF' },
+  { bg: '#B36A49', ink: '#FFFFFF' },
+  { bg: '#786857', ink: '#FFFFFF' },
+  { bg: '#A38249', ink: '#FFFFFF' },
 ];
 
-const SPINE_W = 58;
-const SPINE_H = 208;
-const GAP = tokens.space(2);
+const SPINE_W = 62;
+const SPINE_H = 220;
+const GAP = tokens.space(3);
 
 export default function LibraryScreen() {
   const api = useApi();
   const router = useRouter();
   const r = useRetro();
-  const { colors } = r;
-  const styles = useMemo(() => makeStyles(colors, r.mono), [colors, r.mono]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, r.mono, isDark), [colors, r.mono, isDark]);
   const positions = useAppStore((s) => s.positions);
   const backendUrl = useAppStore((s) => s.backendUrl);
   const { width } = useWindowDimensions();
@@ -75,7 +77,6 @@ export default function LibraryScreen() {
     load();
   };
 
-  // The single most-recently-opened book wears the brass "currently reading" band.
   const currentId = useMemo(() => {
     let best: string | null = null;
     let bestAt = -1;
@@ -85,8 +86,7 @@ export default function LibraryScreen() {
     return best;
   }, [positions]);
 
-  // Books-per-shelf from the viewport, so the wall reflows like a real bookcase.
-  const inner = Math.min(width, 1000) - tokens.space(8);
+  const inner = Math.min(width, 1000) - tokens.space(10);
   const perRow = Math.max(1, Math.floor((inner + GAP) / (SPINE_W + GAP)));
   const rows = useMemo(() => {
     const out: DocumentSummary[][] = [];
@@ -95,29 +95,33 @@ export default function LibraryScreen() {
   }, [docs, perRow]);
 
   return (
-    <Screen style={{ padding: 0 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <LinearGradient
+        colors={[colors.bg, colors.bgAlt]}
+        style={StyleSheet.absoluteFillObject}
+      />
       <View style={styles.toolbar}>
         <BevelButton title="+ Import" onPress={() => router.push('/import')} style={{ flex: 1 }} />
         <BevelButton title="Settings" variant="ghost" onPress={() => router.push('/settings')} style={{ flex: 1 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: tokens.space(4), paddingBottom: tokens.space(8) }}>
+      <ScrollView contentContainerStyle={{ padding: tokens.space(5), paddingBottom: tokens.space(10) }}>
         {error ? (
-          <Window title="⚠ CONNECTION" close onClose={() => setError(null)} style={{ marginBottom: tokens.space(4) }}>
+          <Window title="CONNECTION" close onClose={() => setError(null)} style={{ marginBottom: tokens.space(6) }}>
             <Text style={styles.errTitle}>Backend not reachable</Text>
-            <Muted>{error}</Muted>
-            <Muted style={{ marginTop: 6 }}>Configured URL: {backendUrl}</Muted>
-            <BevelButton title="Retry" variant="ghost" onPress={load} style={{ marginTop: 12, alignSelf: 'flex-start' }} />
+            <Muted style={{ fontSize: 16 }}>{error}</Muted>
+            <Muted style={{ marginTop: 8, fontSize: 13 }}>Configured URL: {backendUrl}</Muted>
+            <BevelButton title="Retry" variant="ghost" onPress={load} style={{ marginTop: 16, alignSelf: 'flex-start' }} />
           </Window>
         ) : null}
 
         {!loading && !error && docs.length === 0 ? (
-          <Window title="LIBRARY.EMPTY" dots>
+          <Window title="LIBRARY" dots>
             <Text style={styles.emptyTitle}>Your shelf is empty</Text>
-            <Muted style={{ marginTop: 6 }}>
+            <Muted style={{ marginTop: 8, fontSize: 16, lineHeight: 24, maxWidth: 400 }}>
               Import a PDF, EPUB, DOCX, text file, an article URL, or pasted text to start listening.
             </Muted>
-            <BevelButton title="Import a document" onPress={() => router.push('/import')} style={{ marginTop: 14, alignSelf: 'flex-start' }} />
+            <BevelButton title="Import a document" onPress={() => router.push('/import')} style={{ marginTop: 24, alignSelf: 'flex-start' }} />
           </Window>
         ) : null}
 
@@ -161,7 +165,7 @@ export default function LibraryScreen() {
           </>
         ) : null}
       </ScrollView>
-    </Screen>
+    </View>
   );
 }
 
@@ -178,34 +182,52 @@ function Spine({
 }) {
   const [hovered, setHovered] = useState(false);
   const tag = SOURCE_LABEL[doc.source_type] ?? doc.source_type.toUpperCase();
-  const lift = hovered && Platform.OS === 'web' ? { transform: [{ translateY: -14 }] } : null;
   const state = pct === 100 ? ' · finished' : pct > 0 ? ' · reading' : ' · new';
+  
+  const lift = useSharedValue(0);
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: lift.value }],
+    };
+  });
+
   return (
-    <View style={styles.spineWrap}>
-      <Pressable
-        onPress={onOpen}
-        onLongPress={onRemove}
-        delayLongPress={450}
-        // @ts-ignore — onHoverIn/onHoverOut are web-only Pressable props (react-native-web).
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
-        style={[
-          styles.spine,
-          { backgroundColor: palette.bg },
-          current && { borderColor: '#C79A5B', borderWidth: 2 },
-          lift,
-        ]}
-      >
-        <Text style={[styles.spineTag, { color: palette.ink }]} numberOfLines={1}>{tag}</Text>
-        <View style={styles.spineTitleWrap}>
-          <Text numberOfLines={1} style={[styles.spineTitle, { color: palette.ink }]}>
-            {doc.title}
-          </Text>
-        </View>
-        <View style={styles.spineNotch}>
-          <View style={[styles.spineNotchFill, { width: `${pct}%`, backgroundColor: palette.ink }]} />
-        </View>
-      </Pressable>
+    <View style={[styles.spineWrap, { zIndex: hovered ? 50 : 1 }]}>
+      <Animated.View style={animatedStyle}>
+        <Pressable
+          onPress={onOpen}
+          onLongPress={onRemove}
+          delayLongPress={450}
+          onPressIn={() => { lift.value = withSpring(-4, { damping: 15 }); }}
+          onPressOut={() => { lift.value = withSpring(hovered && Platform.OS === 'web' ? -16 : 0, { damping: 15 }); }}
+          // @ts-ignore
+          onHoverIn={() => { setHovered(true); lift.value = withSpring(-12, { damping: 11, stiffness: 180, mass: 0.7 }); }}
+          // @ts-ignore
+          onHoverOut={() => { setHovered(false); lift.value = withSpring(0, { damping: 18, stiffness: 260 }); }}
+          style={[
+            styles.spine,
+            { backgroundColor: palette.bg },
+            current && { borderColor: '#C79A5B', borderWidth: 2 },
+          ]}
+        >
+          <LinearGradient
+            colors={['rgba(255,255,255,0.20)', 'rgba(0,0,0,0.15)']}
+            start={{ x: 0.2, y: 0 }}
+            end={{ x: 0.8, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          
+          <Text style={[styles.spineTag, { color: palette.ink }]} numberOfLines={1}>{tag}</Text>
+          <View style={styles.spineTitleWrap}>
+            <Text numberOfLines={1} style={[styles.spineTitle, { color: palette.ink }]}>
+              {doc.title}
+            </Text>
+          </View>
+          <View style={styles.spineNotch}>
+            <View style={[styles.spineNotchFill, { width: `${pct}%`, backgroundColor: palette.ink }]} />
+          </View>
+        </Pressable>
+      </Animated.View>
 
       {hovered && Platform.OS === 'web' ? (
         <View style={[styles.pop, { pointerEvents: 'none' }]}>
@@ -221,72 +243,80 @@ function Spine({
   );
 }
 
-const makeStyles = (c: Palette, mono: string) =>
+const makeStyles = (c: Palette, mono: string, isDark: boolean) =>
   StyleSheet.create({
-    toolbar: { flexDirection: 'row', gap: tokens.space(3), padding: tokens.space(4), paddingBottom: 0 },
-    errTitle: { fontFamily: tokens.fonts.display, color: c.danger, fontSize: 17, fontWeight: '700', marginBottom: 4 },
-    emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3 },
+    toolbar: { flexDirection: 'row', gap: tokens.space(4), padding: tokens.space(5), paddingBottom: 0 },
+    errTitle: { fontFamily: tokens.fonts.display, color: c.danger, fontSize: 18, fontWeight: '700', marginBottom: 4 },
+    emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
 
-    shelfHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: tokens.space(4) },
-    shelfTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
-    shelfMeta: { fontFamily: mono, color: c.faint, fontSize: 11, letterSpacing: 0.4 },
+    shelfHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: tokens.space(6) },
+    shelfTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 32, fontWeight: '800', letterSpacing: -1 },
+    shelfMeta: { fontFamily: mono, color: c.faint, fontSize: 13, letterSpacing: 0.5 },
 
-    shelfRow: { marginBottom: tokens.space(6) },
-    spineRow: { flexDirection: 'row', alignItems: 'flex-end', gap: GAP, minHeight: SPINE_H },
+    shelfRow: { marginBottom: tokens.space(8) },
+    spineRow: { flexDirection: 'row', alignItems: 'flex-end', gap: GAP, minHeight: SPINE_H, zIndex: 10 },
     board: {
-      height: 12,
-      borderRadius: 2,
-      backgroundColor: c.warm,
-      borderBottomWidth: 3,
-      borderBottomColor: 'rgba(0,0,0,0.28)',
-      marginTop: -1,
-      ...tokens.shadow,
+      height: 18,
+      borderRadius: 3,
+      backgroundColor: isDark ? '#3D2F23' : '#C4976A',
+      borderBottomWidth: 5,
+      borderBottomColor: 'rgba(0,0,0,0.45)',
+      marginTop: -3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.22,
+      shadowRadius: 14,
+      elevation: 8,
     },
 
     spine: {
       width: SPINE_W,
       height: SPINE_H,
-      borderRadius: 3,
-      paddingVertical: 10,
+      borderRadius: 6,
+      paddingVertical: 14,
       alignItems: 'center',
       justifyContent: 'space-between',
       overflow: 'hidden',
-      borderColor: 'rgba(0,0,0,0.25)',
-      borderLeftWidth: 2,
+      borderColor: 'rgba(0,0,0,0.2)',
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      ...tokens.shadowRaised,
     },
-    spineTag: { fontFamily: mono, fontSize: 8, fontWeight: '700', letterSpacing: 1, opacity: 0.85 },
+    spineTag: { fontFamily: mono, fontSize: 9, fontWeight: '800', letterSpacing: 1.2, opacity: 0.9 },
     spineTitleWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', width: '100%', overflow: 'hidden' },
-    // Rotated title: give the Text the *tall* dimension as its width, then turn it upright.
     spineTitle: {
-      width: SPINE_H - 64,
+      width: SPINE_H - 80,
       textAlign: 'center',
       transform: [{ rotate: '-90deg' }],
       fontFamily: tokens.fonts.display,
-      fontSize: 13,
-      fontWeight: '600',
-      letterSpacing: 0.1,
+      fontSize: 15,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
     },
-    spineNotch: { width: '78%', height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.28)', overflow: 'hidden' },
-    spineNotchFill: { height: '100%', opacity: 0.9 },
+    spineNotch: { width: '72%', height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.35)', overflow: 'hidden' },
+    spineNotchFill: { height: '100%', opacity: 1 },
 
     spineWrap: { position: 'relative' },
     pop: {
       position: 'absolute',
       bottom: '100%',
-      left: (SPINE_W - 200) / 2,
-      width: 200,
-      marginBottom: 12,
+      left: (SPINE_W - 220) / 2,
+      width: 220,
+      marginBottom: 16,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 8,
-      padding: 12,
+      borderRadius: 12,
+      padding: 16,
       zIndex: 50,
       ...tokens.shadow,
     },
-    popTag: { fontFamily: mono, color: c.accent, fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
-    popTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2, marginTop: 6, lineHeight: 19 },
-    popMeter: { height: 4, borderRadius: 2, backgroundColor: c.surfaceAlt, overflow: 'hidden', marginTop: 10 },
+    popTag: { fontFamily: mono, color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
+    popTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.3, marginTop: 8, lineHeight: 22 },
+    popMeter: { height: 6, borderRadius: 3, backgroundColor: c.surfaceAlt, overflow: 'hidden', marginTop: 12 },
     popFill: { height: '100%', backgroundColor: c.accent },
-    popRowText: { fontFamily: mono, color: c.textDim, fontSize: 10.5, letterSpacing: 0.3, marginTop: 6 },
+    popRowText: { fontFamily: mono, color: c.textDim, fontSize: 11, letterSpacing: 0.4, marginTop: 8 },
   });

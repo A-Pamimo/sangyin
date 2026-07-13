@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,9 +10,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// The PDF view (rendered page images) is a large-screen convenience — on mobile
-// the narrated text is the experience, so it's web/desktop only.
 const PDF_VIEW_ENABLED = Platform.OS === 'web';
 
 import { Chapter, DocumentT, PregenStatus, Voice } from '../src/api/types';
@@ -32,6 +32,7 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const api = useApi();
+  const router = useRouter();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const { voice, lang, speed, setVoice, setSpeed, savePosition, positions } = useAppStore();
@@ -50,11 +51,9 @@ export default function ReaderScreen() {
   const listRef = useRef<FlatList>(null);
 
   const chapter: Chapter | undefined = doc?.chapters[chapterIndex];
-  // The natural voice plays only from cache; selecting it makes Play "prepare first".
   const isNatural = voice === NATURAL_VOICE_ID;
   const naturalReady = !isNatural || pregen?.status === 'done';
 
-  // Load document + voices, restore saved chapter.
   useEffect(() => {
     if (!id) return;
     let alive = true;
@@ -76,8 +75,6 @@ export default function ReaderScreen() {
         .then((v) => {
           if (!alive) return;
           setVoices(v);
-          // Self-correct a persisted voice the backend no longer offers, so we never
-          // send a dead voice id (which the engine would ignore or mis-cache).
           if (v.length && !v.some((x) => x.id === voice)) {
             setVoice(v[0].id, v[0].lang_code);
           }
@@ -88,15 +85,12 @@ export default function ReaderScreen() {
       alive = false;
       abortRef.current?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Keep playback rate in sync with the speed control, live.
   useEffect(() => {
     controller.setRate(speed);
   }, [speed, controller]);
 
-  // Persist resume position as the active sentence advances.
   useEffect(() => {
     if (doc && chapter && state.currentIndex >= 0) {
       savePosition(doc.id, {
@@ -105,10 +99,8 @@ export default function ReaderScreen() {
         updatedAt: Date.now(),
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.currentIndex]);
 
-  // Auto-scroll the active sentence into view.
   useEffect(() => {
     if (!chapter || state.currentIndex < 0) return;
     const pos = chapter.sentences.findIndex((s) => s.index === state.currentIndex);
@@ -117,35 +109,28 @@ export default function ReaderScreen() {
     }
   }, [state.currentIndex, chapter]);
 
-  // OS media controls (web lock screen / notification / media keys).
   useMediaSession(controller, state, {
     title: doc?.title ?? 'Sangyin',
     nowPlaying: chapter?.sentences.find((s) => s.index === state.currentIndex)?.text,
   });
 
-  // Native lock-screen now-playing info (iOS/Android).
   useEffect(() => {
     if (doc && chapter) {
       controller.setNowPlaying({ title: doc.title, artist: chapter.title });
     }
   }, [doc, chapter, controller]);
 
-  // A PDF with no extractable text (scanned/image-based) has nothing to narrate —
-  // open straight to the PDF view instead of a blank text list (web only).
   useEffect(() => {
     if (PDF_VIEW_ENABLED && doc?.has_pdf && !doc.chapters.some((c) => c.sentences.length > 0)) {
       setView('pdf');
     }
   }, [doc]);
 
-  // While background OCR runs on a scanned PDF, poll until the text is ready.
   useEffect(() => {
     if (doc?.ocr_status !== 'pending' || !id) return;
     const iv = setInterval(async () => {
       try {
         const d = await api.getDocument(id);
-        // Only replace `doc` when something actually changed, so we don't churn its
-        // object identity every 4s (which would needlessly re-run doc-keyed effects).
         setDoc((prev) => {
           const count = (x: DocumentT) => x.chapters.reduce((n, c) => n + c.sentences.length, 0);
           if (prev && prev.ocr_status === d.ocr_status && count(prev) === count(d)) return prev;
@@ -153,7 +138,6 @@ export default function ReaderScreen() {
         });
         if (d.ocr_status !== 'pending') clearInterval(iv);
       } catch {
-        /* keep polling */
       }
     }, 4000);
     return () => clearInterval(iv);
@@ -169,10 +153,6 @@ export default function ReaderScreen() {
     }
   };
 
-  // Pre-generation status: read-only. Generation is triggered *only* by an explicit
-  // action (the Play/Prepare button), never automatically — auto-triggering here is
-  // what caused a runaway GPU-spend loop. Keyed on stable ids so the OCR poll swapping
-  // the `doc` object can't re-fire it.
   useEffect(() => {
     const docId = doc?.id;
     const chapterId = chapter?.id;
@@ -187,7 +167,6 @@ export default function ReaderScreen() {
     };
   }, [doc?.id, chapter?.id, voice, api]);
 
-  // While a prepare job runs, poll its progress.
   useEffect(() => {
     const docId = doc?.id;
     const chapterId = chapter?.id;
@@ -198,7 +177,6 @@ export default function ReaderScreen() {
         setPregen(s);
         if (s.status !== 'generating') clearInterval(iv);
       } catch {
-        /* keep polling */
       }
     }, 2500);
     return () => clearInterval(iv);
@@ -237,7 +215,6 @@ export default function ReaderScreen() {
         )) {
           if (ac.signal.aborted) return;
           if (chunk.needs_prepare) {
-            // Natural voice: uncached phrases remain — kick off (or resume) prepare.
             controller.pause();
             preparePregen();
             continue;
@@ -259,14 +236,13 @@ export default function ReaderScreen() {
         if (!ac.signal.aborted) {
           setError(e?.message ?? 'Synthesis failed.');
           startedChapterRef.current = null;
-          controller.pause(); // stop the "preparing" spinner on failure
+          controller.pause();
         }
       }
     },
     [api, doc, voice, lang, speed, controller],
   );
 
-  // Where Play should resume: the saved sentence if it's in this chapter, else the top.
   const resumeIndexFor = (ch: Chapter): number => {
     const saved = positions[doc!.id];
     if (saved && saved.chapterId === ch.id) return saved.sentenceIndex;
@@ -275,8 +251,6 @@ export default function ReaderScreen() {
 
   const onPlayPause = () => {
     if (!chapter) return;
-    // Natural voice must be prepared (cached) once before it can play — Play triggers
-    // that one-time GPU pass instead of a live stream.
     if (isNatural && !naturalReady) {
       if (pregen?.status !== 'generating') preparePregen();
       return;
@@ -294,8 +268,6 @@ export default function ReaderScreen() {
       if (pregen?.status !== 'generating') preparePregen();
       return;
     }
-    // Start (or restart) the stream from the tapped sentence. Cached audio makes
-    // re-taps cheap, and this works whether or not that sentence is loaded yet.
     startStreaming(chapter, true, sentenceIndex);
   };
 
@@ -309,10 +281,7 @@ export default function ReaderScreen() {
   const onSelectVoice = (v: Voice) => {
     setVoice(v.id, v.lang_code);
     setShowVoices(false);
-    // Don't auto-stream when switching to the natural voice — it needs preparing first
-    // (the status effect will refresh, and Play will offer "Prepare").
     if (v.id !== NATURAL_VOICE_ID && chapter && startedChapterRef.current === chapter.id) {
-      // Re-synthesize from the current sentence in the new voice, preserving place.
       const from = state.currentIndex >= 0 ? state.currentIndex : resumeIndexFor(chapter);
       startStreaming(chapter, state.playing, from);
     }
@@ -334,14 +303,9 @@ export default function ReaderScreen() {
     );
   }
 
-  // Audio isn't playing yet even though the user wants it: either the first clip
-  // is still synthesizing (loadedCount 0 — includes the voice model booting on
-  // the very first request) or playback ran out mid-stream (buffering).
   const loadingAudio = !error && state.playing && (state.buffering || state.loadedCount === 0);
   const warmingUp = loadingAudio && state.loadedCount === 0;
 
-  // Playback position within the current chapter — drives the waveform seek strip.
-  // Purely presentational + reuses the existing onTapSentence jump; no new playback logic.
   const posInChapter = chapter.sentences.findIndex((s) => s.index === state.currentIndex);
   const playFrac =
     chapter.sentences.length > 0 && posInChapter >= 0 ? (posInChapter + 1) / chapter.sentences.length : 0;
@@ -354,12 +318,28 @@ export default function ReaderScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Background Lighting */}
+      <LinearGradient colors={[colors.bg, colors.bgAlt]} style={StyleSheet.absoluteFillObject} />
+
       <View style={styles.header}>
-        <View style={styles.titleBar}>
-          <Text style={styles.title} numberOfLines={1}>
-            {doc.title}
-          </Text>
+        <View style={styles.headerInner}>
+          <View style={styles.titleBar}>
+          <Pressable onPress={() => router.push('/library')} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>←</Text>
+          </Pressable>
+          {doc.chapters.length > 1 ? (
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={styles.titleDoc} numberOfLines={1}>{doc.title}</Text>
+              <Text style={styles.title} numberOfLines={1}>
+                {chapter.title || `Section ${chapterIndex + 1}`}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.title} numberOfLines={1}>{doc.title}</Text>
+          )}
+          <View style={{ width: 44 }} />
         </View>
+        
         <View style={styles.headerBody}>
           {doc.chapters.length > 1 && (
             <SegmentedControl<number>
@@ -370,7 +350,6 @@ export default function ReaderScreen() {
               onChange={onSelectChapter}
             />
           )}
-
           {doc.has_pdf && PDF_VIEW_ENABLED && (
             <SegmentedControl<'text' | 'pdf'>
               segments={[
@@ -382,6 +361,7 @@ export default function ReaderScreen() {
               style={{ marginTop: 10 }}
             />
           )}
+        </View>
         </View>
       </View>
 
@@ -403,7 +383,7 @@ export default function ReaderScreen() {
           ref={listRef}
           data={chapter.sentences}
           keyExtractor={(s) => String(s.index)}
-          contentContainerStyle={{ padding: tokens.space(4), paddingBottom: 250, flexGrow: 1 }}
+          contentContainerStyle={{ padding: tokens.space(5), paddingBottom: 280, flexGrow: 1 }}
           ListEmptyComponent={
             <View style={{ paddingVertical: tokens.space(10), alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>No readable text found</Text>
@@ -438,22 +418,39 @@ export default function ReaderScreen() {
           }}
           renderItem={({ item }) => {
             const active = item.index === state.currentIndex;
+            const played = state.currentIndex >= 0 && item.index < state.currentIndex;
             return (
-              <Pressable onPress={() => onTapSentence(item.index)}>
-                <Text style={[styles.sentence, active && styles.sentenceActive]}>{item.text} </Text>
+              <Pressable onPress={() => onTapSentence(item.index)} style={active ? styles.sentenceWrapActive : styles.sentenceWrap}>
+                <Text
+                  style={[
+                    active ? styles.sentenceActive : styles.sentence,
+                    played && !active && { opacity: 0.4 },
+                    !played && !active && { opacity: 0.65 },
+                  ]}
+                >
+                  {item.text}{' '}
+                </Text>
+                {active && <View style={styles.sentenceMarker} />}
               </Pressable>
             );
           }}
         />
       )}
 
+      {/* Premium Dock Component */}
       <View style={styles.dock}>
-        {error ? <Muted style={{ color: colors.danger, marginBottom: 8 }}>{error}</Muted> : null}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.03)']}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+        
+        {error ? <Muted style={{ color: colors.danger, marginBottom: 12 }}>{error}</Muted> : null}
 
         {loadingAudio ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.accent} />
-            <Muted style={{ marginLeft: 8, flex: 1 }}>
+            <Muted style={{ marginLeft: 12, flex: 1, fontSize: 13 }}>
               {warmingUp
                 ? 'Warming up the natural voice — the first play can take up to a minute, then it’s quick.'
                 : 'Buffering the next part…'}
@@ -462,7 +459,7 @@ export default function ReaderScreen() {
         ) : null}
 
         {isNatural && pregen?.status === 'failed' ? (
-          <Muted style={{ color: colors.danger, marginBottom: 8 }}>
+          <Muted style={{ color: colors.danger, marginBottom: 12 }}>
             The natural voice is unavailable right now (GPU spend limit). Your free voices still
             work — pick one above, or try again later.
           </Muted>
@@ -471,8 +468,8 @@ export default function ReaderScreen() {
         {pregen?.status === 'generating' ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.accent} />
-            <View style={{ marginLeft: 8, flex: 1 }}>
-              <Muted>
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Muted style={{ fontSize: 13 }}>
                 {isNatural
                   ? 'Preparing the natural voice for this chapter — a one-time step, then it plays instantly.'
                   : 'Caching this chapter for smooth playback…'}
@@ -480,7 +477,7 @@ export default function ReaderScreen() {
               </Muted>
               <SegMeter
                 pct={pregen.total ? (pregen.done / pregen.total) * 100 : 5}
-                style={{ marginTop: 6 }}
+                style={{ marginTop: 8 }}
               />
             </View>
           </View>
@@ -490,7 +487,7 @@ export default function ReaderScreen() {
           <SegmentedControl<string>
             scroll
             size="sm"
-            style={{ marginBottom: 10 }}
+            style={{ marginBottom: 16 }}
             segments={voices.map((v) => ({ value: v.id, label: v.name }))}
             value={voice}
             onChange={(vid) => {
@@ -519,22 +516,17 @@ export default function ReaderScreen() {
             color={colors.text}
             style={styles.transportBtn}
           />
-          <Pressable
+          <AnimatedPlayButton
+            playing={state.playing}
+            loading={loadingAudio || (isNatural && pregen?.status === 'generating')}
+            prepareOnly={isNatural && !naturalReady}
             onPress={() => {
               sfx.play('toggle');
               onPlayPause();
             }}
-            style={styles.playBtn}
-          >
-            {loadingAudio || (isNatural && pregen?.status === 'generating') ? (
-              <ActivityIndicator color={colors.onAccent} />
-            ) : isNatural && !naturalReady ? (
-              // Prepare-first: this tap runs the one-time GPU pass, not live playback.
-              <Text style={styles.playIcon}>⬇</Text>
-            ) : (
-              <Text style={styles.playIcon}>{state.playing ? '❚❚' : '▶'}</Text>
-            )}
-          </Pressable>
+            colors={colors}
+            shadowColor={mix(colors.accent, '#000', 0.3)}
+          />
           <TransportButton
             label="⏭"
             onPress={() => {
@@ -559,7 +551,6 @@ export default function ReaderScreen() {
             active={showVoices}
             onPress={() => setShowVoices((s) => !s)}
           />
-          {/* Prepare affordance only for the natural (GPU) voice — Kokoro plays live. */}
           {isNatural && pregen?.status === 'done' ? (
             <RetroChip label="✓ Natural ready" tone="accent" />
           ) : isNatural && pregen && pregen.status !== 'generating' ? (
@@ -579,6 +570,66 @@ export default function ReaderScreen() {
   );
 }
 
+function AnimatedPlayButton({
+  playing,
+  loading,
+  prepareOnly,
+  onPress,
+  colors,
+  shadowColor,
+}: {
+  playing: boolean;
+  loading: boolean;
+  prepareOnly: boolean;
+  onPress: () => void;
+  colors: Palette;
+  shadowColor: string;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPressIn={() => (scale.value = withSpring(0.9, { damping: 15 }))}
+        onPressOut={() => (scale.value = withSpring(1, { damping: 15 }))}
+        onPress={onPress}
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: colors.accent,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: colors.surface,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.25,
+          shadowRadius: 20,
+          elevation: 10,
+        }}
+      >
+        <LinearGradient
+          colors={['rgba(255,255,255,0.15)', 'transparent']}
+          style={StyleSheet.absoluteFillObject}
+          borderRadius={36}
+        />
+        {loading ? (
+          <ActivityIndicator color={colors.onAccent} size="large" />
+        ) : prepareOnly ? (
+          <Text style={{ color: colors.onAccent, fontSize: 26, fontWeight: '900' }}>⬇</Text>
+        ) : (
+          <Text style={{ color: colors.onAccent, fontSize: 26, fontWeight: '900', letterSpacing: playing ? -1 : 2 }}>
+            {playing ? '❚❚' : '▶'}
+          </Text>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function TransportButton({
   label,
   onPress,
@@ -590,15 +641,24 @@ function TransportButton({
   color: string;
   style?: ViewStyle;
 }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   return (
-    <Pressable onPress={onPress} style={style}>
-      <Text style={{ color, fontSize: 24 }}>{label}</Text>
-    </Pressable>
+    <Animated.View style={[style, animatedStyle]}>
+      <Pressable
+        onPressIn={() => (scale.value = withSpring(0.85, { damping: 15 }))}
+        onPressOut={() => (scale.value = withSpring(1, { damping: 15 }))}
+        onPress={onPress}
+        style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Text style={{ color, fontSize: 22, fontWeight: '700' }}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
-// The "instrument" seek strip: the chapter drawn as a waveform, filled to the
-// current sentence. Tapping seeks (reuses onTapSentence — no new playback logic).
 function Waveform({
   frac,
   label,
@@ -611,28 +671,30 @@ function Waveform({
   colors: Palette;
 }) {
   const [w, setW] = useState(0);
-  const BARS = 44;
+  const BARS = 48;
   const filled = Math.round(frac * BARS);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 }}>
       <Pressable
         onLayout={(e) => setW(e.nativeEvent.layout.width)}
         onPress={(e) => {
           if (w > 0) onSeek(Math.max(0, Math.min(1, e.nativeEvent.locationX / w)));
         }}
-        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, height: 42 }}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, height: 44 }}
       >
         {Array.from({ length: BARS }, (_, i) => {
           const env = Math.sin((i / BARS) * Math.PI);
-          const h = 8 + env * 22;
+          const h = 8 + env * 24;
           const head = i === filled;
           return (
-            <View key={i} style={{ flex: 1, height: 42, justifyContent: 'center' }}>
+            <View key={i} style={{ flex: 1, height: 44, justifyContent: 'center' }}>
               <View
                 style={{
-                  height: Math.max(5, h),
-                  borderRadius: 1,
+                  height: Math.max(4, h),
+                  borderRadius: 2,
                   backgroundColor: head ? colors.warm : i < filled ? colors.accent : colors.surfaceAlt,
+                  borderWidth: head ? 1 : 0,
+                  borderColor: head ? 'rgba(0,0,0,0.1)' : 'transparent',
                 }}
               />
             </View>
@@ -642,10 +704,12 @@ function Waveform({
       <Text
         style={{
           fontFamily: tokens.fonts.mono,
-          fontSize: 11.5,
+          fontSize: 12,
+          fontWeight: '600',
           color: colors.textDim,
           minWidth: 54,
           textAlign: 'right',
+          fontVariant: ['tabular-nums'],
         }}
       >
         {label}
@@ -655,98 +719,84 @@ function Waveform({
 }
 
 const makeStyles = (c: Palette, isDark: boolean) => {
-  const accentShadow = mix(c.accent, '#000000', 0.22);
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
-    header: { borderBottomWidth: 1, borderBottomColor: c.border },
+    header: { borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.surface },
+    headerInner: { alignSelf: 'center', width: '100%', maxWidth: 900 },
     titleBar: {
-      backgroundColor: isDark ? c.accent : c.accentDeep,
-      paddingHorizontal: tokens.space(4),
-      paddingVertical: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: mix(isDark ? c.accent : c.accentDeep, '#000000', 0.25),
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: tokens.space(3),
+      paddingVertical: 10,
     },
-    title: { fontFamily: tokens.fonts.mono, color: c.onAccent, fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+    backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+    backBtnText: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 24, fontWeight: '400' },
+    titleDoc: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 12, fontWeight: '500', letterSpacing: 0.1, textAlign: 'center' },
+    title: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: -0.2, textAlign: 'center', flex: 1 },
     headerBody: {
       paddingHorizontal: tokens.space(4),
-      paddingTop: 10,
-      paddingBottom: tokens.space(2),
+      paddingBottom: tokens.space(3),
     },
-    emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.3 },
-    emptyBtn: { backgroundColor: c.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: tokens.radiusChrome },
-    emptyBtnGhost: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-    emptyBtnText: { fontFamily: tokens.fonts.body, color: c.onAccent, fontSize: 15, fontWeight: '600' },
+    emptyTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
+    emptyBtn: { backgroundColor: c.accent, paddingVertical: 14, paddingHorizontal: 24, borderRadius: tokens.radiusChrome, ...tokens.shadowRaised },
+    emptyBtnGhost: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border, ...tokens.shadowRaised },
+    emptyBtnText: { fontFamily: tokens.fonts.body, color: c.onAccent, fontSize: 16, fontWeight: '700' },
     ocrBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
-      paddingHorizontal: tokens.space(4),
-      backgroundColor: c.accentSoft,
+      paddingVertical: 12,
+      paddingHorizontal: tokens.space(5),
+      backgroundColor: c.surfaceAlt,
       borderBottomWidth: 1,
       borderBottomColor: c.border,
     },
     loadingRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 10,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
+      marginBottom: 16,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
       borderRadius: tokens.radiusChrome,
-      backgroundColor: c.accentSoft,
+      backgroundColor: c.surfaceAlt,
+      borderWidth: 1,
+      borderColor: c.border,
     },
-    // Reading surface stays calm: color/background/weight only — identical box
-    // metrics to inactive so activation never changes row height (keeps auto-scroll aligned).
-    sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 19, lineHeight: 30 },
-    sentenceActive: {
-      color: c.text,
-      backgroundColor: c.accentSoft,
-      fontWeight: '600',
-    },
+    sentenceWrap: { paddingVertical: 4, paddingHorizontal: 8, marginHorizontal: -8, borderRadius: 8 },
+    sentenceWrapActive: { paddingVertical: 4, paddingHorizontal: 8, marginHorizontal: -8, borderRadius: 8, backgroundColor: c.accentSoft, position: 'relative' },
+    sentenceMarker: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, backgroundColor: c.accent },
+    sentence: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 21, lineHeight: 34, fontWeight: '500' },
+    sentenceActive: { fontFamily: tokens.fonts.body, color: c.text, fontSize: 21, lineHeight: 34, fontWeight: '700' },
     dock: {
       position: 'absolute',
-      left: 0,
-      right: 0,
+      alignSelf: 'center',
+      width: '100%',
+      maxWidth: 900,
       bottom: 0,
       backgroundColor: c.surface,
       borderTopWidth: 1,
       borderTopColor: c.border,
-      paddingHorizontal: tokens.space(4),
-      paddingTop: tokens.space(4),
-      paddingBottom: tokens.space(6),
-      shadowColor: '#363E28',
-      shadowOffset: { width: 0, height: -8 },
-      shadowOpacity: 0.1,
-      shadowRadius: 20,
-      elevation: 12,
+      paddingHorizontal: tokens.space(5),
+      paddingTop: tokens.space(6),
+      paddingBottom: tokens.space(8),
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      ...tokens.shadow,
     },
-    transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(5) },
+    transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: tokens.space(6) },
     transportBtn: {
-      width: 46,
-      height: 46,
-      borderRadius: 12,
-      backgroundColor: c.surface,
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      backgroundColor: c.surfaceAlt,
       borderWidth: 1,
       borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
-    playBtn: {
-      width: 60,
-      height: 60,
-      borderRadius: 16,
-      backgroundColor: c.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: accentShadow,
-      shadowColor: '#363E28',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.32,
-      shadowRadius: 16,
-      elevation: 6,
+    bottomRow: {
+      flexDirection: 'row', justifyContent: 'center', gap: tokens.space(3),
+      marginTop: 28, paddingTop: 16, flexWrap: 'wrap',
+      borderTopWidth: 1, borderTopColor: c.border,
     },
-    playIcon: { color: c.onAccent, fontSize: 22, fontWeight: '800' },
-    bottomRow: { flexDirection: 'row', justifyContent: 'center', gap: tokens.space(3), marginTop: 14, flexWrap: 'wrap' },
   });
 };

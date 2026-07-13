@@ -1,6 +1,7 @@
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,19 +10,24 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { sfx } from '../sfx/sfx';
 import { mix, Palette, tokens, useRetro } from '../theme';
 import { Scramble } from '../fx/Scramble';
 import { useReduceMotion } from '../fx/useReduceMotion';
 
-// One import site for screens: the calm ui.tsx primitives plus the retro upgrades.
 export { Button, Card, Screen, H1, Muted } from './ui';
 
 // ---------------------------------------------------------------------------
-// Title bar — the chrome strip atop a Window.
+// Title bar — elevated modern tactile header.
 // ---------------------------------------------------------------------------
-
 export function TitleBar({
   title,
   dots,
@@ -40,11 +46,11 @@ export function TitleBar({
   const r = useRetro();
   const { colors: c } = r;
   const titleStyle: TextStyle = {
-    fontFamily: r.mono,
+    fontFamily: r.fonts.display,
     color: r.chromeBarText,
-    fontSize: 12.5,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: -0.2,
   };
   return (
     <View
@@ -52,11 +58,11 @@ export function TitleBar({
         height: r.chromeBarHeight,
         backgroundColor: r.chromeBar,
         borderBottomWidth: 1,
-        borderBottomColor: mix(r.chromeBar, '#000000', 0.25),
+        borderBottomColor: c.border,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: tokens.space(3),
-        gap: tokens.space(2),
+        paddingHorizontal: tokens.space(4),
+        gap: tokens.space(3),
       }}
     >
       {dots ? (
@@ -87,7 +93,7 @@ export function TitleBar({
           hitSlop={8}
           style={{ paddingHorizontal: 4 }}
         >
-          <Text style={[titleStyle, { fontSize: 16, fontWeight: '700' }]}>×</Text>
+          <Text style={[titleStyle, { fontSize: 20, fontWeight: '500' }]}>×</Text>
         </Pressable>
       ) : null}
     </View>
@@ -95,9 +101,8 @@ export function TitleBar({
 }
 
 // ---------------------------------------------------------------------------
-// Window — beveled card with an optional title bar. `bare` ≡ the old Card.
+// Window — premium tactile card.
 // ---------------------------------------------------------------------------
-
 export function Window({
   children,
   title,
@@ -124,7 +129,7 @@ export function Window({
   bodyStyle?: ViewStyle;
 }) {
   const r = useRetro();
-  const { colors: c } = r;
+  const { colors: c, isDark } = r;
   const b = r.bevel(variant);
 
   if (bare) {
@@ -159,7 +164,7 @@ export function Window({
           borderWidth: b.borderWidth,
           borderRadius: tokens.radiusChrome,
           overflow: 'hidden',
-          ...tokens.shadow,
+          ...tokens.shadowRaised,
         },
         style,
       ]}
@@ -167,15 +172,24 @@ export function Window({
       {title != null ? (
         <TitleBar title={title} dots={dots} close={close} right={right} scramble={scramble} onClose={onClose} />
       ) : null}
-      <View style={[{ padding: tokens.space(5) }, bodyStyle]}>{children}</View>
+      <View style={[{ padding: tokens.space(5), position: 'relative' }, bodyStyle]}>
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)',
+            zIndex: 1,
+          }}
+        />
+        {children}
+      </View>
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// BevelButton — drop-in for ui.tsx Button, with a pressed inset flip + SFX.
+// BevelButton -> TactileButton (Renamed internally but exported as BevelButton)
 // ---------------------------------------------------------------------------
-
 export function BevelButton({
   title,
   onPress,
@@ -196,58 +210,90 @@ export function BevelButton({
   const r = useRetro();
   const { colors: c } = r;
   const reduceMotion = useReduceMotion();
-  const bg = variant === 'primary' ? c.accent : c.surface;
-  const fg = variant === 'primary' ? c.onAccent : variant === 'danger' ? c.danger : c.text;
-  const [pressed, setPressed] = useState(false);
+  const scale = useSharedValue(1);
+  const hoverLift = useSharedValue(0);
 
-  const light = mix(bg, '#FFFFFF', 0.18);
-  const shadow = mix(bg, '#000000', 0.22);
-  const inset = pressed && !reduceMotion; // pressed flips the bevel; skipped under reduce-motion
-  const tl = inset ? shadow : light;
-  const br = inset ? light : shadow;
+  const bg = variant === 'primary' ? c.accent : variant === 'danger' ? c.danger : c.surface;
+  const fg = variant === 'primary' || variant === 'danger' ? c.onAccent : c.text;
+  const b = r.bevel('raised');
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateY: interpolate(hoverLift.value, [0, 1], [0, -2]) },
+    ],
+  }));
 
   return (
-    <Pressable
-      disabled={disabled || loading}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      onPress={() => {
-        if (sound) sfx.play('tap');
-        onPress();
-      }}
-      style={[
-        {
-          backgroundColor: bg,
-          borderTopColor: tl,
-          borderLeftColor: tl,
-          borderBottomColor: br,
-          borderRightColor: br,
-          borderWidth: tokens.bevelWidth,
-          borderRadius: tokens.radiusChrome,
-          paddingVertical: 12,
-          paddingHorizontal: 20,
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: disabled ? 0.5 : 1,
-        },
-        style,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <Text style={{ fontFamily: tokens.fonts.body, fontSize: 15, fontWeight: '600', color: fg }}>
-          {title}
-        </Text>
-      )}
-    </Pressable>
+    <Animated.View style={!reduceMotion ? animatedStyle : undefined}>
+      <Pressable
+        disabled={disabled || loading}
+        onPressIn={() => {
+          scale.value = withSpring(0.94, { damping: 18, stiffness: 600 });
+          hoverLift.value = withSpring(0, { damping: 18, stiffness: 600 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 15, stiffness: 350 });
+          hoverLift.value = withSpring(1, { damping: 15, stiffness: 350 });
+        }}
+        onPress={() => {
+          if (sound) sfx.play('tap');
+          onPress();
+        }}
+        // @ts-ignore web-only hover handlers
+        onHoverIn={() => {
+          if (!reduceMotion && variant !== 'ghost')
+            hoverLift.value = withSpring(1, { stiffness: 400, damping: 26 });
+        }}
+        // @ts-ignore web-only hover handlers
+        onHoverOut={() => {
+          hoverLift.value = withSpring(0, { stiffness: 300, damping: 22 });
+        }}
+        style={[
+          {
+            backgroundColor: variant === 'ghost' ? 'transparent' : bg,
+            borderTopColor: variant === 'ghost' ? 'transparent' : b.borderTopColor,
+            borderLeftColor: variant === 'ghost' ? 'transparent' : b.borderLeftColor,
+            borderBottomColor: variant === 'ghost' ? 'transparent' : b.borderBottomColor,
+            borderRightColor: variant === 'ghost' ? 'transparent' : b.borderRightColor,
+            borderWidth: variant === 'ghost' ? 0 : b.borderWidth,
+            borderRadius: tokens.radiusChrome,
+            paddingVertical: 14,
+            paddingHorizontal: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: disabled ? 0.5 : 1,
+            ...(variant !== 'ghost' ? tokens.shadowRaised : {}),
+          },
+          style,
+        ]}
+      >
+        {variant === 'primary' && !reduceMotion ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+              borderTopLeftRadius: tokens.radiusChrome,
+              borderTopRightRadius: tokens.radiusChrome,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+            }}
+          />
+        ) : null}
+        {loading ? (
+          <ActivityIndicator color={fg} />
+        ) : (
+          <Text style={{ fontFamily: tokens.fonts.body, fontSize: 16, fontWeight: '700', color: fg, letterSpacing: -0.1 }}>
+            {title}
+          </Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// SegmentedControl — beveled inset well of options; drives theme / voice / speed.
+// SegmentedControl — tactile pill segments
 // ---------------------------------------------------------------------------
-
 export interface Segment<T> {
   value: T;
   label: string;
@@ -273,17 +319,58 @@ export function SegmentedControl<T extends string | number>({
 }) {
   const r = useRetro();
   const { colors: c } = r;
-  const b = r.bevel('inset');
-  const padV = size === 'sm' ? 6 : 9;
-  const padH = size === 'sm' ? 12 : 15;
+  const reduceMotion = useReduceMotion();
+  const padV = size === 'sm' ? 8 : 10;
+  const padH = size === 'sm' ? 14 : 18;
+
+  const rects = useRef<{ x: number; width: number }[]>([]);
+  const pillX = useSharedValue(0);
+  const pillW = useSharedValue(0);
+  const activeIdx = segments.findIndex((s) => s.value === value);
+
+  useEffect(() => {
+    const rect = rects.current[activeIdx];
+    if (!rect) return;
+    if (reduceMotion) {
+      pillX.value = rect.x;
+      pillW.value = rect.width;
+    } else {
+      pillX.value = withSpring(rect.x, { stiffness: 380, damping: 28 });
+      pillW.value = withSpring(rect.width, { stiffness: 380, damping: 28 });
+    }
+  }, [activeIdx]);
+
+  const pillStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: pillX.value,
+    width: pillW.value,
+    borderRadius: tokens.radiusChrome - 2,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    ...tokens.shadowRaised,
+  }));
 
   const row = (
-    <View style={[styles.segRow, !scroll && style]}>
-      {segments.map((seg) => {
+    <View style={[styles.segRow, { position: 'relative' }, !scroll && style]}>
+      <Animated.View style={pillStyle} />
+      {segments.map((seg, i) => {
         const on = seg.value === value;
         return (
           <Pressable
             key={String(seg.value)}
+            onLayout={(e) => {
+              rects.current[i] = {
+                x: e.nativeEvent.layout.x,
+                width: e.nativeEvent.layout.width,
+              };
+              if (on) {
+                pillX.value = e.nativeEvent.layout.x;
+                pillW.value = e.nativeEvent.layout.width;
+              }
+            }}
             onPress={() => {
               if (sound) sfx.play('toggle');
               onChange(seg.value);
@@ -291,24 +378,26 @@ export function SegmentedControl<T extends string | number>({
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 7,
+              gap: 8,
               paddingVertical: padV,
               paddingHorizontal: padH,
-              borderRadius: tokens.radiusChrome,
-              backgroundColor: on ? c.accent : 'transparent',
+              borderRadius: tokens.radiusChrome - 2,
+              backgroundColor: 'transparent',
+              zIndex: 1,
             }}
           >
             {seg.swatch ? (
-              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: seg.swatch }} />
+              <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: seg.swatch, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' }} />
             ) : null}
             <Text
               numberOfLines={1}
               style={{
-                fontFamily: r.mono,
-                fontSize: size === 'sm' ? 12 : 12.5,
-                fontWeight: '700',
-                letterSpacing: 0.2,
-                color: on ? c.onAccent : c.textDim,
+                fontFamily: tokens.fonts.body,
+                fontSize: size === 'sm' ? 14 : 15,
+                fontWeight: on ? '700' : '500',
+                letterSpacing: -0.1,
+                color: c.text,
+                opacity: on ? 1 : 0.55,
               }}
             >
               {seg.label}
@@ -320,14 +409,11 @@ export function SegmentedControl<T extends string | number>({
   );
 
   const wellStyle: ViewStyle = {
-    backgroundColor: b.face,
-    borderTopColor: b.borderTopColor,
-    borderLeftColor: b.borderLeftColor,
-    borderBottomColor: b.borderBottomColor,
-    borderRightColor: b.borderRightColor,
-    borderWidth: b.borderWidth,
+    backgroundColor: c.surfaceAlt,
+    borderWidth: 1,
+    borderColor: c.border,
     borderRadius: tokens.radiusChrome,
-    padding: 3,
+    padding: 6,
   };
 
   if (scroll) {
@@ -341,9 +427,8 @@ export function SegmentedControl<T extends string | number>({
 }
 
 // ---------------------------------------------------------------------------
-// RetroChip — small mono tag / status pill (hairline, not a full bevel).
+// RetroChip — tactile pill
 // ---------------------------------------------------------------------------
-
 export function RetroChip({
   label,
   tone = 'default',
@@ -361,7 +446,6 @@ export function RetroChip({
 }) {
   const r = useRetro();
   const { colors: c } = r;
-  const styles2 = useMemo(() => chipStyles(c, r.mono), [c, r.mono]);
 
   let bg = c.surfaceAlt;
   let fg = c.text;
@@ -382,9 +466,22 @@ export function RetroChip({
   }
 
   const inner = (
-    <View style={[styles2.chip, { backgroundColor: bg, borderColor: border }, style]}>
+    <View style={[
+      {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 999,
+        borderWidth: 1,
+        backgroundColor: bg,
+        borderColor: border,
+      },
+      style
+    ]}>
       {icon}
-      <Text style={[styles2.chipText, { color: fg }]} numberOfLines={1}>
+      <Text style={{ fontFamily: tokens.fonts.body, fontSize: 14, fontWeight: '600', color: fg }} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -404,13 +501,12 @@ export function RetroChip({
 }
 
 // ---------------------------------------------------------------------------
-// SegMeter — a blocky segmented progress bar (retro "loading cells").
+// SegMeter — modern segmented progress bar
 // ---------------------------------------------------------------------------
-
 export function SegMeter({
   pct,
   cells = 12,
-  height = 10,
+  height = 12,
   style,
 }: {
   pct: number; // 0..100
@@ -423,17 +519,17 @@ export function SegMeter({
   const clamped = Math.max(0, Math.min(100, pct));
   const filled = Math.round((clamped / 100) * cells);
   return (
-    <View style={[{ flexDirection: 'row', gap: 2 }, style]}>
+    <View style={[{ flexDirection: 'row', gap: 3 }, style]}>
       {Array.from({ length: cells }, (_, i) => (
         <View
           key={i}
           style={{
             flex: 1,
             height,
-            borderRadius: 1,
+            borderRadius: 2,
             backgroundColor: i < filled ? c.accent : c.surfaceAlt,
             borderWidth: 1,
-            borderColor: i < filled ? c.accentDeep : c.border,
+            borderColor: i < filled ? c.accentDeep : 'transparent',
           }}
         />
       ))}
@@ -442,20 +538,6 @@ export function SegMeter({
 }
 
 const styles = StyleSheet.create({
-  segRow: { flexDirection: 'row', gap: 3, alignItems: 'center' },
+  segRow: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   segSelfStart: { alignSelf: 'flex-start' },
 });
-
-const chipStyles = (c: Palette, mono: string) =>
-  StyleSheet.create({
-    chip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
-      borderRadius: tokens.radiusChrome,
-      borderWidth: 1,
-    },
-    chipText: { fontFamily: mono, fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
-  });

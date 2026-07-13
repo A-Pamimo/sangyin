@@ -54,9 +54,11 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: tokens.space(4) }}>
+      <ScrollView contentContainerStyle={{ gap: tokens.space(6), paddingBottom: tokens.space(10) }}>
+        <Text style={styles.pageTitle}>Settings</Text>
+        
         <Window title="THEME.SYS" dots>
-          <Muted style={{ marginBottom: 12 }}>Earth-tone palettes. Loam is a dark mode.</Muted>
+          <Muted style={{ marginBottom: 16 }}>Earth-tone palettes. Loam is a dark mode.</Muted>
           <SegmentedControl
             segments={THEME_LABELS.map((t) => ({ value: t.name, label: t.label, swatch: SWATCHES[t.name] }))}
             value={themeName}
@@ -66,9 +68,9 @@ export default function SettingsScreen() {
 
         <Window title="SOUND & MOTION">
           <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
               <Text style={styles.label}>Sound effects</Text>
-              <Muted style={{ marginTop: 2 }}>Tactile UI blips (web only).</Muted>
+              <Muted style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>Tactile UI blips (web only).</Muted>
             </View>
             <Switch
               value={sfxEnabled}
@@ -81,9 +83,9 @@ export default function SettingsScreen() {
             />
           </View>
           <View style={[styles.switchRow, styles.rowDivider]}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
               <Text style={styles.label}>Reduce motion</Text>
-              <Muted style={{ marginTop: 2 }}>Skip the intro, marquees, and parallax.</Muted>
+              <Muted style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>Skip the intro, marquees, and parallax.</Muted>
             </View>
             <Switch
               value={reduceMotion}
@@ -98,11 +100,11 @@ export default function SettingsScreen() {
         </Window>
 
         <Window title="BACKEND.CFG">
-          <Muted style={{ marginBottom: 4 }}>Point the app at your self-hosted Sangyin backend.</Muted>
+          <Muted style={{ marginBottom: 12 }}>Point the app at your self-hosted Sangyin backend.</Muted>
           <TextInput
             style={[
               styles.input,
-              { borderTopColor: inset.borderTopColor, borderLeftColor: inset.borderLeftColor, borderBottomColor: inset.borderBottomColor, borderRightColor: inset.borderRightColor, borderWidth: inset.borderWidth },
+              { borderTopColor: inset.borderTopColor, borderLeftColor: inset.borderLeftColor, borderBottomColor: inset.borderBottomColor, borderRightColor: inset.borderRightColor, borderWidth: 1 },
             ]}
             value={draftUrl}
             onChangeText={setDraftUrl}
@@ -111,11 +113,23 @@ export default function SettingsScreen() {
             placeholder="http://localhost:8000"
             placeholderTextColor={colors.textDim}
           />
-          <View style={{ flexDirection: 'row', gap: tokens.space(2), marginTop: 12 }}>
-            <BevelButton title="Test" variant="ghost" onPress={test} style={{ flex: 1 }} />
-            <BevelButton title="Save" onPress={() => setBackendUrl(draftUrl)} style={{ flex: 1 }} />
+          <View style={{ flexDirection: 'row', gap: tokens.space(3), marginTop: 16 }}>
+            <View style={{ flex: 1 }}><BevelButton title="Test" variant="ghost" onPress={test} /></View>
+            <View style={{ flex: 1 }}><BevelButton title="Save" onPress={() => setBackendUrl(draftUrl)} /></View>
           </View>
-          {status ? <Muted style={{ marginTop: 10 }}>{status}</Muted> : null}
+          {status ? (
+            <View style={[
+              styles.statusPill,
+              status.startsWith('✓') ? styles.statusOk : styles.statusErr,
+            ]}>
+              <View style={[styles.statusDot, {
+                backgroundColor: status.startsWith('✓') ? '#7A9E6E' : colors.danger,
+              }]} />
+              <Text style={[styles.statusText, {
+                color: status.startsWith('✓') ? '#7A9E6E' : colors.danger,
+              }]}>{status}</Text>
+            </View>
+          ) : null}
         </Window>
 
         <Window title="VOICE.SYS">
@@ -149,16 +163,26 @@ export default function SettingsScreen() {
 
 const makeStyles = (c: Palette, mono: string) =>
   StyleSheet.create({
-    label: { fontFamily: mono, color: c.text, fontSize: 14, fontWeight: '700', letterSpacing: 0.2 },
+    pageTitle: { fontFamily: tokens.fonts.display, color: c.text, fontSize: 32, fontWeight: '800', letterSpacing: -1, marginBottom: tokens.space(2) },
+    label: { fontFamily: tokens.fonts.body, color: c.text, fontSize: 16, fontWeight: '700', letterSpacing: 0.1 },
     input: {
       marginTop: 10,
       backgroundColor: c.surfaceAlt,
       color: c.text,
-      borderRadius: tokens.radiusChrome,
-      padding: 12,
+      borderRadius: tokens.radiusSm,
+      padding: 14,
       fontFamily: tokens.fonts.body,
-      fontSize: 15,
+      fontSize: 16,
     },
     switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    rowDivider: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.border },
+    rowDivider: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: c.border },
+    statusPill: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      marginTop: 12, padding: 10,
+      borderRadius: tokens.radiusSm, borderWidth: 1,
+    },
+    statusOk:  { backgroundColor: 'rgba(122,158,110,0.08)', borderColor: 'rgba(122,158,110,0.20)' },
+    statusErr: { backgroundColor: 'rgba(205,122,84,0.08)',  borderColor: 'rgba(205,122,84,0.20)' },
+    statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+    statusText: { fontFamily: tokens.fonts.mono, fontSize: 12, letterSpacing: 0.3, flex: 1 },
   });

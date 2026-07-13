@@ -8,6 +8,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Palette, tokens, useTheme } from '../theme';
 
@@ -62,8 +63,17 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
 }
 
 export function Screen({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const { colors } = useTheme();
   const styles = useStyles();
-  return <View style={[styles.screen, style]}>{children}</View>;
+  return (
+    <View style={[styles.screen, style]}>
+      <LinearGradient
+        colors={[colors.bg, colors.bgAlt]}
+        style={StyleSheet.absoluteFillObject}
+      />
+      {children}
+    </View>
+  );
 }
 
 export function H1({ children, style }: { children: ReactNode; style?: TextStyle }) {
@@ -78,7 +88,7 @@ export function Muted({ children, style }: { children: ReactNode; style?: TextSt
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    screen: { flex: 1, backgroundColor: c.bg, padding: tokens.space(4) },
+    screen: { flex: 1, backgroundColor: c.bg, padding: tokens.space(5) },
     btn: {
       paddingVertical: 14,
       paddingHorizontal: 20,
@@ -87,7 +97,7 @@ const makeStyles = (c: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    btnText: { fontFamily: tokens.fonts.body, fontSize: 15, fontWeight: '600' },
+    btnText: { fontFamily: tokens.fonts.body, fontSize: 16, fontWeight: '700' },
     card: {
       backgroundColor: c.surface,
       borderColor: c.border,
@@ -99,9 +109,9 @@ const makeStyles = (c: Palette) =>
     h1: {
       fontFamily: tokens.fonts.display,
       color: c.text,
-      fontSize: 30,
-      fontWeight: '700',
+      fontSize: 32,
+      fontWeight: '800',
       letterSpacing: -0.5,
     },
-    muted: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 13, lineHeight: 20 },
+    muted: { fontFamily: tokens.fonts.body, color: c.textDim, fontSize: 14, lineHeight: 22 },
   });

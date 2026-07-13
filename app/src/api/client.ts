@@ -105,10 +105,12 @@ export class ApiClient {
     return this.postJson('/documents/url', { url });
   }
 
-  async importFile(file: { uri: string; name: string; mimeType?: string }): Promise<DocumentT> {
+  async importFile(file: { uri: string; name: string; mimeType?: string; webFile?: any }): Promise<DocumentT> {
     const form = new FormData();
 
-    if (Platform.OS === 'web') {
+    if (file.webFile) {
+      form.append('file', file.webFile);
+    } else if (Platform.OS === 'web') {
       const response = await fetch(file.uri);
       const blob = await response.blob();
       form.append('file', blob, file.name);

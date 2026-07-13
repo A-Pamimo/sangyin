@@ -49,6 +49,7 @@ export default function RootLayout() {
           headerShadowVisible: false,
           headerTitleStyle: { fontFamily: t.fonts.mono, fontWeight: '700' },
           contentStyle: { backgroundColor: t.colors.bg },
+          headerShown: false,
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />

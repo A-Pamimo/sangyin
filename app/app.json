@@ -32,14 +32,15 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single",
+      "output": "static",
       "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/sangyin"
     },
     "extra": {
       "router": {},

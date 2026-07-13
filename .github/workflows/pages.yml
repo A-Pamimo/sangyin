@@ -32,6 +32,8 @@ jobs:
 
       - name: Export static site
         working-directory: app
+        env:
+          EXPO_PUBLIC_BACKEND_URL: https://sangyin-backend-inwls.ondigitalocean.app
         run: npx expo export --platform web
 
       - name: Upload Pages artifact

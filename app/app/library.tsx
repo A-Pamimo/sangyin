@@ -98,7 +98,7 @@ export default function LibraryScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <LinearGradient
         colors={[colors.bg, colors.bgAlt]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       <View style={styles.toolbar}>
         <BevelButton title="+ Import" onPress={() => router.push('/import')} style={{ flex: 1 }} />
@@ -214,7 +214,7 @@ function Spine({
             colors={['rgba(255,255,255,0.20)', 'rgba(0,0,0,0.15)']}
             start={{ x: 0.2, y: 0 }}
             end={{ x: 0.8, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           
           <Text style={[styles.spineTag, { color: palette.ink }]} numberOfLines={1}>{tag}</Text>
@@ -288,8 +288,8 @@ const makeStyles = (c: Palette, mono: string, isDark: boolean) =>
       width: SPINE_H - 80,
       textAlign: 'center',
       transform: [{ rotate: '-90deg' }],
-      fontFamily: tokens.fonts.display,
-      fontSize: 15,
+      fontFamily: tokens.fonts.serif,
+      fontSize: 16,
       fontWeight: '700',
       letterSpacing: 0.2,
       textShadowColor: 'rgba(0,0,0,0.3)',

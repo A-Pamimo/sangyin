@@ -1,0 +1,196 @@
+/* Fonts are loaded in index.html */
+
+:root {
+  /* Fernwood Sage Theme */
+  --paper: #ECEBE0;
+  --paper-alt: #E4E2D4;
+  --ink: #23271D;
+  --ink-light: #4E543F;
+  --accent: #5F6B44;
+  --cinnabar: #B15238; /* Earthy red for seals */
+  
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-sans: 'Hanken Grotesk', sans-serif;
+  --font-serif: 'Noto Serif SC', serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Base Utility Classes */
+.fixed-scene {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  pointer-events: none; /* Let interactions pass through if needed */
+}
+
+/* Nav */
+.nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 2rem 4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--cinnabar);
+  color: var(--cinnabar);
+  font-family: var(--font-serif);
+  font-weight: 900;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.brand-text {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: 0.1em;
+}
+
+/* Typography elements for animation */
+.modern-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(4rem, 12vw, 12rem);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.poem-text {
+  font-family: var(--font-serif);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  letter-spacing: 0.3em;
+  color: var(--ink-light);
+  line-height: 2;
+}
+
+.statement {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2rem, 5vw, 4rem);
+  color: var(--ink);
+  max-width: 800px;
+}
+
+/* Masking elements */
+.blossom-mask {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0px;
+  height: 0px;
+  background-color: var(--ink);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* UI Cards for the App Reveal */
+.ui-card {
+  background: var(--paper);
+  border-radius: 16px; /* Matching radiusChrome */
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.11); /* shadowRaised */
+  width: 100%;
+  max-width: 400px;
+  color: var(--ink);
+}
+
+.ui-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ui-desc {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--ink-light);
+  line-height: 1.6;
+}
+
+/* CTA */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 2.5rem;
+  background: var(--accent);
+  color: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.2s ease;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 1.5rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid var(--ink);
+  border-radius: 99px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+  background: var(--ink);
+  color: var(--paper);
+}

@@ -1,0 +1,200 @@
+/* ------------------------------------------------------------------ *
+ * Fernwood replica styles — the product/finale "resolve into the real
+ * app" surfaces. Values mirror app/src/theme.ts (sage theme) via
+ * theme/fernwood.ts; these classes are the CSS-only stand-ins for the
+ * app's React Native components (which cannot run in this Vite app).
+ * ------------------------------------------------------------------ */
+
+/* ---- Scene 6: Product ---- */
+.scene--product {
+  gap: 1.6rem;
+  padding: 6vh 6vw;
+}
+
+.fw-window {
+  width: min(680px, 88vw);
+  border: 1px solid;
+  overflow: hidden;
+  will-change: transform, border-radius, box-shadow;
+}
+.fw-window__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid;
+  transform-origin: top center;
+  overflow: hidden;
+}
+.fw-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.fw-window__title {
+  margin-left: auto;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+.fw-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.8rem 2rem 2.2rem;
+  align-items: flex-start;
+}
+.fw-line {
+  border-radius: 2px;
+  will-change: clip-path;
+}
+
+.fw-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  max-width: min(680px, 88vw);
+}
+.fw-chip {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transform-origin: bottom center;
+  will-change: transform;
+}
+.fw-caption {
+  font-size: clamp(1rem, 2.2vw, 1.3rem);
+  max-width: 40ch;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ---- Scene 7: Audio ---- */
+.scene--audio {
+  display: block;
+  padding: 0;
+}
+.audio__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.audio__scrubber {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6vw;
+}
+
+/* ---- Waveform scrubber (shared: audio end-state + finale) ---- */
+.scrubber {
+  width: min(680px, 88vw);
+  padding: 16px 18px;
+}
+.scrubber__wave {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+}
+.scrubber__bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 2px;
+}
+.scrubber__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 2px;
+}
+.scrubber__meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+/* ---- Scene 8: Finale ---- */
+.scene--finale {
+  gap: 1.8rem;
+}
+.finale__logo {
+  font-family: var(--cjk, 'Noto Serif SC', serif);
+  font-weight: 600;
+  font-size: clamp(3.4rem, 10vw, 6rem);
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.finale__pin {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  letter-spacing: 0.3em;
+  font-size: clamp(1rem, 2.4vw, 1.4rem);
+}
+.finale__cta {
+  /* the .stage ancestor is pointer-events:none; re-enable so the CTA is clickable */
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 14px 30px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.2s ease;
+}
+.finale__cta:hover {
+  filter: brightness(1.06);
+}
+.finale__cta:active {
+  transform: translateY(1px);
+}
+.finale__foot {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
+}
+
+/* Shared focus ring for the real CTA (keeps focus even while settling). */
+.finale__cta:focus-visible,
+.static-frame a:focus-visible {
+  outline: 2px solid var(--jade);
+  outline-offset: 3px;
+}
+
+/* ---- Reduced-motion / no-JS static frame ---- */
+.static-frame {
+  position: relative;
+  z-index: 12;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  text-align: center;
+  padding: 12vh 24px;
+}
+.static-frame ul {
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+  color: var(--ink-soft);
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+}

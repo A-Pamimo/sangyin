@@ -1,8 +1,8 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
 
-// Web-only root HTML. Loads the Fernwood display/body fonts (Bricolage Grotesque
-// + Hanken Grotesk) and paints the warm cream page background behind the app.
+// Web-only root HTML. Loads the cinematic fonts (Inter + Noto Serif SC)
+// and paints the warm page background behind the app.
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="en">
@@ -14,7 +14,7 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Serif+SC:wght@400;500;600;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
 
@@ -28,6 +28,6 @@ export default function Root({ children }: PropsWithChildren) {
 
 const rootStyle = `
   html, body { background-color: #ECEBE0; }
-  body { font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   ::selection { background: #93A17E; color: #ECEBE0; }
 `;

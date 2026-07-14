@@ -162,7 +162,7 @@ export function Window({
           borderBottomColor: b.borderBottomColor,
           borderRightColor: b.borderRightColor,
           borderWidth: b.borderWidth,
-          borderRadius: tokens.radiusChrome,
+          borderRadius: tokens.radius,
           overflow: 'hidden',
           ...tokens.shadowRaised,
         },
@@ -173,14 +173,7 @@ export function Window({
         <TitleBar title={title} dots={dots} close={close} right={right} scramble={scramble} onClose={onClose} />
       ) : null}
       <View style={[{ padding: tokens.space(5), position: 'relative' }, bodyStyle]}>
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)',
-            zIndex: 1,
-          }}
-        />
+        {/* Modern Card - no inset light */}
         {children}
       </View>
     </View>
@@ -268,17 +261,7 @@ export function BevelButton({
           style,
         ]}
       >
-        {variant === 'primary' && !reduceMotion ? (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-              borderTopLeftRadius: tokens.radiusChrome,
-              borderTopRightRadius: tokens.radiusChrome,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-            }}
-          />
-        ) : null}
+        {/* Modern Pill Button - no chunky inset light needed */}
         {loading ? (
           <ActivityIndicator color={fg} />
         ) : (

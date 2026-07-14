@@ -319,7 +319,7 @@ export default function ReaderScreen() {
   return (
     <View style={styles.container}>
       {/* Background Lighting */}
-      <LinearGradient colors={[colors.bg, colors.bgAlt]} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={[colors.bg, colors.bgAlt]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.header}>
         <View style={styles.headerInner}>
@@ -441,7 +441,7 @@ export default function ReaderScreen() {
       <View style={styles.dock}>
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.03)']}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
         
@@ -613,8 +613,7 @@ function AnimatedPlayButton({
       >
         <LinearGradient
           colors={['rgba(255,255,255,0.15)', 'transparent']}
-          style={StyleSheet.absoluteFillObject}
-          borderRadius={36}
+          style={StyleSheet.absoluteFill}
         />
         {loading ? (
           <ActivityIndicator color={colors.onAccent} size="large" />

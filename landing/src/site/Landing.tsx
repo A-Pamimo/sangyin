@@ -1,173 +1,160 @@
-import { VoiceLine } from './VoiceLine'
+import { useRef, useEffect } from 'react'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
 
-/** Where the reader app is served (GitHub Pages sub-path / app base). */
-const APP_URL = '/sangyin'
-
-/** Only capabilities that actually ship (verified against the backend + app). */
-const FEATURES: Array<[string, string]> = [
-  [
-    'Reads aloud, naturally',
-    'A natural voice reads every sentence — streamed, so it starts in seconds instead of making you wait for the whole document.',
-  ],
-  [
-    'Any document',
-    'PDF, EPUB, DOCX, TXT, pasted text, or a web link. Sangyin parses, cleans, and paginates it for you.',
-  ],
-  [
-    'Follows along as it reads',
-    'It highlights the exact sentence it’s speaking — in the text, and on the original PDF page.',
-  ],
-  [
-    'Reads scanned pages too',
-    'Built-in OCR turns scanned PDFs and photographed pages into text you can actually listen to.',
-  ],
-  [
-    'Keeps a library',
-    'Everything you import is saved and ready to reopen whenever you want to keep listening.',
-  ],
-]
-
-const STEPS: Array<[string, string, string]> = [
-  ['Bring', 'A file or a link', 'PDF, EPUB, DOCX, TXT, pasted text, or a web page.'],
-  ['Listen', 'Natural voice, streamed', 'It starts reading in seconds, sentence by sentence.'],
-  ['Follow', 'Highlighted live', 'In the text and on the original page as it reads.'],
-]
+gsap.registerPlugin(ScrollTrigger)
 
 export function Landing() {
+  const container = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    // ----------------------------------------------------
+    // APPLE-STYLE NATIVE SCROLL TIMELINE
+    // ----------------------------------------------------
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: document.documentElement,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 1, // Smooth Apple-style scrub
+      }
+    })
+
+    // Hide scroll prompt early
+    tl.to(".scroll-prompt", { opacity: 0, duration: 0.5 }, 0)
+
+    // --- PHASE 1: The Pull Apart (0 - 2) ---
+    // The massive modern title splits to reveal the traditional poem
+    tl.to(".title-left", { x: "-50vw", opacity: 0, duration: 2 }, 0)
+    tl.to(".title-right", { x: "50vw", opacity: 0, duration: 2 }, 0)
+    tl.to(".poem-text", { y: 0, opacity: 1, duration: 2 }, 0)
+    
+    // Fade out poem
+    tl.to(".poem-text", { opacity: 0, y: -50, duration: 1 }, 2.5)
+
+    // --- PHASE 2: The Stroke & Statement (3 - 5) ---
+    // Draw SVG stroke
+    tl.to(".stroke-path", { strokeDashoffset: 0, duration: 2, ease: "power1.inOut" }, 3)
+    // Slide in statement
+    tl.to(".statement", { opacity: 1, x: 0, duration: 1.5 }, 3.5)
+    
+    // Fade out Phase 2
+    tl.to(".statement, .stroke-svg", { opacity: 0, scale: 0.9, duration: 1 }, 5.5)
+
+    // --- PHASE 3: The Blossom / Portal (6 - 8) ---
+    // A perfect geometric circle scales infinitely to wipe the screen dark
+    tl.to(".blossom-mask", { width: "300vmax", height: "300vmax", duration: 2, ease: "power2.inOut" }, 6)
+
+    // --- PHASE 4: The Instrument / App Reveal (8 - 10) ---
+    tl.to(".ui-cards .ui-card", { 
+      y: 0, 
+      opacity: 1, 
+      duration: 1, 
+      stagger: 0.3, 
+      ease: "power3.out",
+      pointerEvents: 'auto'
+    }, 7.5)
+    
+    tl.to(".final-cta", { opacity: 1, y: 0, duration: 1 }, 8.5)
+
+  }, { scope: container })
+
+  // Force scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
   return (
-    <>
-      <header className="nav">
-        <div className="wrap nav__in">
-          <a className="brand" href={APP_URL}>
-            <span className="brand__mk">桑吟</span>
-            <VoiceLine kind="brand" className="brand__wave voiceline" />
-            <span className="brand__nm">Sangyin</span>
-          </a>
-          <a className="btn btn--line mini" href={APP_URL}>
-            Open the reader
-          </a>
+    <div className="app-container" style={{ width: '100vw', height: '600vh' }}>
+      
+      {/* NATIVELY FIXED SCENE: Zero GSAP layout bugs. Guaranteed 120fps. */}
+      <div ref={container} className="fixed-scene">
+        
+        {/* NAV */}
+        <nav className="nav">
+          <div className="brand">
+            <span className="seal">桑</span>
+            <span className="brand-text">Sangyin</span>
+          </div>
+          <button 
+            className="btn-outline" 
+            onClick={() => window.location.href = '/app'}
+          >
+            Skip to App
+          </button>
+        </nav>
+
+        {/* SCROLL PROMPT */}
+        <div className="scroll-prompt" style={{ position: 'absolute', bottom: '3rem', width: '100%', textAlign: 'center', opacity: 0.5, letterSpacing: '0.1em' }}>
+          Scroll down ↓
         </div>
-      </header>
 
-      <main>
-        <section className="hero">
-          <div className="wrap">
-            <p className="label hero__eye">Sangyin · a reader that reads to you</p>
-            <h1 className="hero__h1">
-              Read with your <span className="say">ears.</span>
-            </h1>
-            <div className="hero__cols">
-              <div>
-                <div className="recite">
-                  <p className="recite__text">
-                    Sangyin turns any PDF, EPUB, or web page into a natural-voice audiobook.{' '}
-                    <mark>It reads every sentence aloud and highlights it as it goes</mark> — right
-                    on the page, even for scanned documents.
-                  </p>
-                  <div className="recite__player">
-                    <button className="play" aria-label="Playing">
-                      <svg viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M4 3l9 5-9 5z" />
-                      </svg>
-                    </button>
-                    <VoiceLine kind="hero" className="recite__wave voiceline" />
-                    <span className="recite__time">4:12 / 9:48</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="hero__cta">
-                  <a className="btn" href={APP_URL}>
-                    Open the reader
-                  </a>
-                  <a className="btn btn--line" href="#how">
-                    How it works
-                  </a>
-                </div>
-                <p className="label hero__formats">PDF · EPUB · DOCX · TXT · Links</p>
-              </div>
-            </div>
+        {/* PHASE 1: Title & Poem */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modern-title title-left" style={{ position: 'absolute', left: '50%', transform: 'translateX(-100%)', transformOrigin: 'right' }}>SANG</div>
+          <div className="modern-title title-right" style={{ position: 'absolute', right: '50%', transform: 'translateX(100%)', transformOrigin: 'left' }}>YIN</div>
+          
+          <div className="poem-text" style={{ opacity: 0, transform: 'translateY(50px)' }}>
+            闻 声 如 见 人<br/>
+            读 书 万 卷 意
           </div>
-        </section>
-
-        <section className="band">
-          <div className="wrap">
-            <div className="head">
-              <p className="label head__k">What it does</p>
-              <h2 className="head__t">Five things, done well.</h2>
-            </div>
-            <div className="index">
-              {FEATURES.map(([title, body], i) => (
-                <div className="row" key={title}>
-                  <div className="row__n">{String(i + 1).padStart(2, '0')}</div>
-                  <div className="row__b">
-                    <h3>{title}</h3>
-                    <p>{body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="listen">
-          <div className="wrap">
-            <p className="label listen__k">The voice</p>
-            <h2 className="listen__t">
-              A voice that sounds like someone who <em>means it</em>.
-            </h2>
-            <VoiceLine kind="listen" className="listen__wave voiceline" />
-            <a className="btn btn--onDark" href={APP_URL}>
-              Open the reader
-            </a>
-          </div>
-        </section>
-
-        <section className="band" id="how">
-          <div className="wrap">
-            <div className="head">
-              <p className="label head__k">How it works</p>
-            </div>
-            <p className="how__line">
-              Bring a document, and Sangyin <b>parses it</b>, <b>reads it aloud</b>, and{' '}
-              <b>highlights as it goes</b> — so the reading gets done while your eyes rest.
-            </p>
-            <div className="how__meta">
-              {STEPS.map(([k, t, b]) => (
-                <div className="m" key={k}>
-                  <span>{k}</span>
-                  <b>{t}</b>
-                  <p>{b}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="close">
-          <div className="wrap">
-            <div className="close__mk" aria-hidden="true">
-              桑吟
-            </div>
-            <VoiceLine kind="close" className="close__wave voiceline" />
-            <h2 className="close__t">Start listening to what you’ve meant to read.</h2>
-            <a className="btn" href={APP_URL}>
-              Open the reader
-            </a>
-          </div>
-        </section>
-      </main>
-
-      <footer className="foot">
-        <div className="wrap foot__in">
-          <span className="brand">
-            <span className="brand__mk">桑吟</span>&nbsp;&nbsp;a reader that reads to you.
-          </span>
-          <a className="btn btn--line mini" href={APP_URL}>
-            Open the reader
-          </a>
         </div>
-      </footer>
-    </>
+
+        {/* PHASE 2: The Stroke */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10vw' }}>
+          
+          <svg className="stroke-svg" width="100%" height="300" viewBox="0 0 1000 300" style={{ position: 'absolute', opacity: 0.2 }}>
+             {/* A highly elegant, precise SVG stroke */}
+             <path 
+               className="stroke-path" 
+               d="M 50 150 Q 250 50 500 150 T 950 150" 
+               fill="none" 
+               stroke="var(--ink)" 
+               strokeWidth="4" 
+               strokeDasharray="1000" 
+               strokeDashoffset="1000" 
+             />
+          </svg>
+
+          <div className="statement" style={{ opacity: 0, transform: 'translateX(-50px)' }}>
+            The library is a place.<br/>
+            <span style={{ color: 'var(--ink-light)', fontSize: '0.7em' }}>The reader is an instrument.</span>
+          </div>
+        </div>
+
+        {/* PHASE 3 & 4: The Blossom & UI Reveal */}
+        <div className="blossom-mask">
+          {/* Inside the dark mask, we reveal the modern UI */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10vw' }}>
+            
+            <div className="ui-cards" style={{ display: 'flex', gap: '2rem', width: '100%', maxWidth: '900px', justifyContent: 'center' }}>
+              
+              <div className="ui-card" style={{ opacity: 0, transform: 'translateY(50px)' }}>
+                <div className="ui-title">Kokoro TTS Engine</div>
+                <div className="ui-desc">Lightning fast, on-device text-to-speech. Voices that adapt to the emotional cadence of the text, creating a natural listening experience.</div>
+              </div>
+              
+              <div className="ui-card" style={{ opacity: 0, transform: 'translateY(50px)' }}>
+                <div className="ui-title">Universal Format</div>
+                <div className="ui-desc">Drop in EPUBs, PDFs, or raw text. Sangyin parses, cleans, and presents them in a beautiful, distraction-free typography system.</div>
+              </div>
+
+            </div>
+
+            <div className="final-cta" style={{ opacity: 0, transform: 'translateY(20px)', marginTop: '4rem' }}>
+              <button 
+                className="btn-primary" 
+                onClick={() => window.location.href = '/app'}
+              >
+                Open the Reader
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
   )
 }

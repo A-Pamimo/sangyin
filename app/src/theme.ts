@@ -91,8 +91,9 @@ export const THEME_LABELS: { name: ThemeName; label: string }[] = [
 // Non-color tokens — identical across every theme.
 export const tokens = {
   fonts: {
-    display: "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    body: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    display: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    serif: "'Noto Serif SC', ui-serif, Georgia, serif",
     mono: Platform.select({
       web: "'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
       ios: 'Menlo',
@@ -102,17 +103,17 @@ export const tokens = {
   },
   radius: 24,
   radiusSm: 12,
-  radiusChrome: 16, // More rounded for modern tactile feel
-  bevelWidth: 1, // Kept for subtle highlighting, not chunky retro bevels
-  chromeBarHeight: 44, // Taller, more modern header
+  radiusChrome: 999, // Apple-style pill shape for buttons
+  bevelWidth: 1, // Ultra-fine hairline bevel
+  chromeBarHeight: 48,
   chromeDot: 10,
   space: (n: number) => n * 4,
-  // Four-tier semantic shadow system (sm → xl)
+  // Four-tier semantic shadow system (sm → xl) - softened for modern look
   shadows: {
-    sm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 },  shadowOpacity: 0.06, shadowRadius: 4,  elevation: 2 },
-    md: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 },  shadowOpacity: 0.11, shadowRadius: 12, elevation: 4 },
-    lg: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 },  shadowOpacity: 0.16, shadowRadius: 22, elevation: 8 },
-    xl: { shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.20, shadowRadius: 40, elevation: 12 },
+    sm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 },  shadowOpacity: 0.04, shadowRadius: 4,  elevation: 2 },
+    md: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 },  shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+    lg: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 },  shadowOpacity: 0.12, shadowRadius: 22, elevation: 8 },
+    xl: { shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.16, shadowRadius: 40, elevation: 12 },
   },
   // Back-compat aliases
   shadow: {

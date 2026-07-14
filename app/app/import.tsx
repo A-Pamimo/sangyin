@@ -104,7 +104,7 @@ export default function ImportScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <LinearGradient
         colors={[colors.bg, colors.bgAlt]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       
       <View style={styles.toolbar}>
@@ -234,7 +234,7 @@ const makeStyles = (c: Palette, mono: string, isDark: boolean) =>
     multiline: { minHeight: 200, textAlignVertical: 'top' },
     drop: {
       position: 'relative',
-      borderRadius: tokens.radiusChrome,
+      borderRadius: tokens.radius,
       backgroundColor: c.surfaceAlt,
       paddingVertical: 44,
       paddingHorizontal: 20,

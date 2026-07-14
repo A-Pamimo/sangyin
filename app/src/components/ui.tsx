@@ -69,7 +69,7 @@ export function Screen({ children, style }: { children: ReactNode; style?: ViewS
     <View style={[styles.screen, style]}>
       <LinearGradient
         colors={[colors.bg, colors.bgAlt]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       {children}
     </View>

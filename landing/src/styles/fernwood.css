@@ -144,6 +144,8 @@
   font-size: clamp(1rem, 2.4vw, 1.4rem);
 }
 .finale__cta {
+  /* the .stage ancestor is pointer-events:none; re-enable so the CTA is clickable */
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   min-height: 48px;

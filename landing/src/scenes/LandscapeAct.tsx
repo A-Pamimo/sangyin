@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useScene } from '../engine/useScene'
 import { useRafBinding } from '../engine/useRafBinding'
 import { useWetnessFilter } from '../engine/useWetnessFilter'
 import { SCENES } from '../engine/scenes'
@@ -54,9 +53,6 @@ const isSmallViewport = () =>
   window.matchMedia('(max-width: 640px)').matches
 
 export function LandscapeAct() {
-  const { phase } = useScene(LANDSCAPE_ACT)
-  const hidden = phase !== 'active'
-
   const small = useMemo(isSmallViewport, [])
 
   // Parallax layer wrappers (hot transforms written imperatively).
@@ -110,7 +106,6 @@ export function LandscapeAct() {
     <section
       className="scene scene--landscape"
       aria-label="Travelling down a hanging scroll into a living Shan Shui landscape of ink mountains, water, and mist"
-      style={{ visibility: hidden ? 'hidden' : 'visible' }}
     >
       {/* Shared wet-ink filters, defined once, referenced across layers. */}
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>

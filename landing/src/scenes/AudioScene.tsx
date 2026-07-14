@@ -35,8 +35,7 @@ const isSmallViewport = () =>
   window.matchMedia('(max-width: 640px)').matches
 
 export function AudioScene() {
-  const { progress: t, phase } = useScene(DEF)
-  const hidden = phase !== 'active'
+  const { progress: t } = useScene(DEF)
 
   const small = useMemo(isSmallViewport, [])
   const N = small ? 260 : 600
@@ -48,16 +47,21 @@ export function AudioScene() {
   const css = useRef({ w: 0, h: 0 })
   const { getFrame } = useScrollEngine()
 
-  // Once the CJK font is ready, sample the glyph into particle seeds; until
-  // then use a fallback silhouette so an early scroll still animates.
+  // Sample the glyph into particle seeds — but only AFTER the CJK font has
+  // actually loaded, or the raster is tofu/empty and the end characters "don't
+  // load". Explicitly load the face (not just fonts.ready), and keep the
+  // fallback silhouette unless the sample returns a real glyph.
   useEffect(() => {
     particles.current = makeParticles(fallbackSeeds(N), N, barCount)
     let cancelled = false
-    const ready = (document as Document & { fonts?: FontFaceSet }).fonts?.ready
-    Promise.resolve(ready).then(() => {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+    const loaded = fonts?.load
+      ? fonts.load("600 240px 'Noto Serif SC'").then(() => fonts.ready)
+      : Promise.resolve()
+    loaded.then(() => {
       if (cancelled) return
       const seeds = sampleGlyph('桑吟', "'Noto Serif SC', serif", 1400)
-      particles.current = makeParticles(seeds.length ? seeds : fallbackSeeds(N), N, barCount)
+      if (seeds.length > 40) particles.current = makeParticles(seeds, N, barCount)
     })
     return () => {
       cancelled = true
@@ -118,7 +122,6 @@ export function AudioScene() {
     <section
       className="scene scene--audio"
       aria-label="The characters 桑吟 lift off the page and become a spoken waveform — the reader reads aloud"
-      style={{ visibility: hidden ? 'hidden' : 'visible' }}
     >
       <canvas
         ref={canvasRef}

@@ -32,20 +32,12 @@ const INK_ACT: SceneDef = {
 const BANDS = 8
 const W = 1000
 
-/**
- * The departure MUST begin exactly as the next scene starts rising, or the
- * written name sits dead-centre while the next scene climbs into it — a stack,
- * not a pan (the M3→M4 dead-zone the review caught). Derive it from the scene
- * boundaries so it survives any re-weighting of scenes.ts.
- */
-const SPAN = INK_ACT.end - INK_ACT.start
-const DEPART_FROM = clamp01((SCENES[2].start - INK_ACT.start) / SPAN)
-
-// Choreography breakpoints within the act's local progress t ∈ [0, 1].
-// Writing must finish just before departure begins.
-const SPREAD_TO = 0.34 // pool has fully spread by here
-const WRITE_FROM = 0.3
-const WRITE_TO = Math.max(WRITE_FROM + 0.2, DEPART_FROM - 0.04)
+// Choreography breakpoints within the act's local progress t ∈ [0, 1]. The
+// PortalLayer owns the exit (the camera zooms into 吟's counter over global
+// 0.15–0.215 ≈ local 0.70–1.0), so the writing must be FINISHED before then.
+const SPREAD_TO = 0.32 // pool has fully spread by here
+const WRITE_FROM = 0.28
+const WRITE_TO = 0.66 // characters fully written before the portal zoom begins
 
 const DROPLETS = [
   { dx: -34, dy: -20, r: 26, delay: 0.08 },
@@ -54,7 +46,7 @@ const DROPLETS = [
 ]
 
 export function InkAct() {
-  const { progress: t, phase } = useScene(INK_ACT)
+  const { progress: t } = useScene(INK_ACT)
 
   // Register both wet-ink filters on the --wetness dial. They stay at full
   // scale through the ancient acts (wetness ≈ 1 here) and dry later, driven by
@@ -75,10 +67,8 @@ export function InkAct() {
   const haloScale = (0.12 + easeOutCubic(clamp01(t / 0.45)) * 1.7) * (1 - consume * 0.85)
   const haloOpacity = (0.06 + clamp01(t / SPREAD_TO) * 0.05) * (1 - consume)
 
-  // ---- camera: gentle push-in while writing, then travel up past the name ----
-  const depart = clamp01((t - DEPART_FROM) / (1 - DEPART_FROM))
-  const camScale = 0.99 + write * 0.05 + depart * 0.05
-  const camY = -depart * 118 // vh
+  // ---- camera: a gentle push-in while writing; PortalLayer owns the exit ----
+  const camScale = 0.99 + write * 0.06
 
   // ---- brush tip riding the writing edge ----
   const paintFrac = clamp01(write)
@@ -88,13 +78,10 @@ export function InkAct() {
   // whisper-quiet first-scroll cue on the empty paper
   const hint = Math.max(0, 1 - t / 0.08)
 
-  const hidden = phase === 'after'
-
   return (
     <section
       className="scene scene--ink"
       aria-label="Ink drops, spreads, and is drawn into the characters 桑吟 (Sangyin)"
-      style={{ visibility: hidden ? 'hidden' : 'visible' }}
     >
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
         <defs>
@@ -106,8 +93,8 @@ export function InkAct() {
             <feTurbulence type="fractalNoise" baseFrequency="0.014 0.03" numOctaves="2" seed="9" result="n" />
             <feDisplacementMap ref={calligWetRef} in="SourceGraphic" in2="n" scale="10" xChannelSelector="R" yChannelSelector="G" />
           </filter>
-          <filter id="callig-tip" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="7" />
+          <filter id="callig-tip" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.5" />
           </filter>
           <clipPath id="callig-glyphs">
             <text
@@ -129,7 +116,7 @@ export function InkAct() {
       {/* Everything the camera sees moves as one unit. */}
       <div
         className="ink-act__cam"
-        style={{ transform: `translate3d(0, ${camY}vh, 0) scale(${camScale})` }}
+        style={{ transform: `scale(${camScale})` }}
       >
         {/* pooled ink */}
         <div className="ink">

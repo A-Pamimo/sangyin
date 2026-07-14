@@ -32,8 +32,7 @@ const FEATURES = [
 ]
 
 export function ProductScene() {
-  const { progress: p, phase } = useScene(DEF)
-  const hidden = phase !== 'active'
+  const { progress: p } = useScene(DEF)
 
   // The window forms first: outline → rounded, filled, shadowed.
   const form = easeInOut(range(p, 0, 0.34))
@@ -54,7 +53,6 @@ export function ProductScene() {
     <section
       className="scene scene--product"
       aria-label="The reader emerges from the ink: PDF and EPUB reading, annotations, AI summaries, voice, and cross-device sync"
-      style={{ visibility: hidden ? 'hidden' : 'visible' }}
     >
       <div
         className="fw-window"

@@ -111,6 +111,15 @@ html.lenis body {
   pointer-events: none;
 }
 
+/* ---- Portal layer: owns each scene's match-cut entry/exit ---- */
+.portal-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform, clip-path;
+  backface-visibility: hidden;
+  transform-origin: 50% 50%;
+}
+
 /* ---- Track: invisible tall spacer that creates scroll distance ---- */
 .track {
   position: relative;
@@ -209,13 +218,14 @@ html.lenis body {
   border-radius: 50%;
   transform-origin: center;
   will-change: transform, opacity;
+  /* Ink diffusing into wet paper — a soft radial WASH, not a blur filter.
+     (The user flagged background blur; this is a crisp gradient, no filter.) */
   background: radial-gradient(
     circle,
-    rgba(35, 33, 28, 0.5) 0%,
-    rgba(35, 33, 28, 0.18) 42%,
-    transparent 68%
+    rgba(35, 33, 28, 0.32) 0%,
+    rgba(35, 33, 28, 0.12) 40%,
+    transparent 66%
   );
-  filter: blur(14px);
 }
 
 /* The whisper-quiet first-scroll cue. */

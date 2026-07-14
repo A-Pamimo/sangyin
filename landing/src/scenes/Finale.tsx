@@ -17,8 +17,7 @@ import { Scrubber } from '../components/Scrubber'
 const DEF = SCENES[7]
 
 export function Finale() {
-  const { progress: t, phase } = useScene(DEF)
-  const hidden = phase !== 'active'
+  const { progress: t } = useScene(DEF)
 
   const logo = range(t, 0.05, 0.5) // logo writes on
   const rise = easeInOut(range(t, 0.3, 0.8)) // pin/scrubber/cta settle up
@@ -27,7 +26,7 @@ export function Finale() {
     <section
       className="scene scene--finale"
       aria-label="Sangyin — open the reader"
-      style={{ visibility: hidden ? 'hidden' : 'visible', color: sage.text }}
+      style={{ color: sage.text }}
     >
       <div
         className="finale__logo"

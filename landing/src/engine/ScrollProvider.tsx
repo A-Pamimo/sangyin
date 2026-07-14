@@ -89,10 +89,11 @@ export function ScrollProvider({ children }: { children: ReactNode }) {
 
     if (smooth) {
       lenis = new Lenis({
-        // Gentle, museum-like glide. Higher duration = longer coast.
-        duration: 1.15,
+        // Smooth but responsive — a long coast felt stuck/jumpy. Shorter glide,
+        // 1:1 wheel so the portal zooms track the wheel closely.
+        duration: 0.9,
         easing: (t) => 1 - Math.pow(1 - t, 3),
-        wheelMultiplier: 0.9,
+        wheelMultiplier: 1.0,
         touchMultiplier: 1.1,
       })
 

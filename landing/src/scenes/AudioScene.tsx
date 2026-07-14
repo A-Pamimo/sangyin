@@ -123,15 +123,18 @@ export function AudioScene() {
       className="scene scene--audio"
       aria-label="The characters 桑吟 lift off the page and become a spoken waveform — the reader reads aloud"
     >
+      {/* Swap via DISPLAY, not visibility: a child `visibility:visible` would
+          override the PortalLayer's `visibility:hidden` and leave the canvas
+          stuck on screen at every scroll position. */}
       <canvas
         ref={canvasRef}
         className="audio__canvas"
-        style={{ visibility: settled ? 'hidden' : 'visible' }}
+        style={{ display: settled ? 'none' : 'block' }}
         aria-hidden
       />
       <div
         className="audio__scrubber"
-        style={{ visibility: settled ? 'visible' : 'hidden' }}
+        style={{ display: settled ? 'flex' : 'none' }}
       >
         <Scrubber progress={playhead} small={small} />
       </div>

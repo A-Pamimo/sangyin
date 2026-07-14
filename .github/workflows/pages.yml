@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
+# Builds BOTH the cinematic landing (Vite, at the site root) and the reader app
+# (Expo web export, under /sangyin), then composes one _site and deploys it.
 on:
   push:
-    branches: [claude/sangyin-audio-reader-lwih1j]
+    branches: [claude/sangyin-audio-reader-lwih1j, claude/github-pages]
   workflow_dispatch:
 
 permissions:
@@ -22,24 +24,59 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: app/.node-version
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            landing/package-lock.json
 
-      - name: Install dependencies
+      # ---- Landing (root of the site) ----
+      - name: Install landing deps
+        working-directory: landing
+        run: npm ci
+
+      - name: Build landing
+        working-directory: landing
+        run: npm run build # vite base './' → path-agnostic assets
+
+      # ---- Reader app (served under /sangyin) ----
+      - name: Install app deps
         working-directory: app
         run: npm ci
 
-      - name: Export static site
+      - name: Export app (static web)
         working-directory: app
         env:
           EXPO_PUBLIC_BACKEND_URL: https://sangyin-backend-inwls.ondigitalocean.app
         run: npx expo export --platform web
 
+      # ---- Compose the deployed tree ----
+      - name: Assemble _site (landing at /, app at /sangyin)
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          cp -r landing/dist/. _site/
+          mkdir -p _site/sangyin
+          cp -r app/dist/. _site/sangyin/
+          touch _site/.nojekyll   # keep Expo's _expo/ dir (Jekyll drops leading-underscore paths)
+
+      # ---- Verify the app honors baseUrl /sangyin ----
+      - name: Check app base path
+        run: |
+          set -euo pipefail
+          if grep -q '"/sangyin/_expo\|/sangyin/_expo\|href="/sangyin' _site/sangyin/index.html; then
+            echo "OK: app assets reference /sangyin"
+          else
+            echo "::warning::app/dist/index.html does not reference /sangyin — the sub-path app may 404. Check app.json experiments.baseUrl or pass expo export --base-url /sangyin."
+            echo "----- head of _site/sangyin/index.html -----"
+            head -n 40 _site/sangyin/index.html || true
+          fi
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: app/dist
+          path: _site
 
   deploy:
     needs: build

@@ -1,57 +1,49 @@
-import { ReaderMock } from './ReaderMock'
+import { VoiceLine } from './VoiceLine'
 
 /** Where the reader app is served (GitHub Pages sub-path / app base). */
 const APP_URL = '/sangyin'
 
-const FEATURES = [
-  {
-    glyph: '诵',
-    title: 'Reads aloud, naturally',
-    body: 'A warm AI voice reads every sentence — and highlights it as it goes, so you can follow or just listen.',
-  },
-  {
-    glyph: '典',
-    title: 'PDF, EPUB & more',
-    body: 'Open a PDF, EPUB, DOCX, TXT, or paste a web link. Sangyin parses, cleans, and paginates it for you.',
-  },
-  {
-    glyph: '语',
-    title: 'AI summaries',
-    body: 'Get the gist first. AI distills the long ones into a short read before you commit the time.',
-  },
-  {
-    glyph: '笔',
-    title: 'Highlight & annotate',
-    body: 'Mark passages and jot notes as you listen, without breaking your flow.',
-  },
-  {
-    glyph: '云',
-    title: 'In sync everywhere',
-    body: 'Your library and your exact place follow you across every device.',
-  },
-  {
-    glyph: '耳',
-    title: 'Read without the screen',
-    body: 'Commute, cook, walk, or rest your eyes. It’s reading, for the times you can’t look.',
-  },
+/** Only capabilities that actually ship (verified against the backend + app). */
+const FEATURES: Array<[string, string]> = [
+  [
+    'Reads aloud, naturally',
+    'A natural voice reads every sentence — streamed, so it starts in seconds instead of making you wait for the whole document.',
+  ],
+  [
+    'Any document',
+    'PDF, EPUB, DOCX, TXT, pasted text, or a web link. Sangyin parses, cleans, and paginates it for you.',
+  ],
+  [
+    'Follows along as it reads',
+    'It highlights the exact sentence it’s speaking — in the text, and on the original PDF page.',
+  ],
+  [
+    'Reads scanned pages too',
+    'Built-in OCR turns scanned PDFs and photographed pages into text you can actually listen to.',
+  ],
+  [
+    'Keeps a library',
+    'Everything you import is saved and ready to reopen whenever you want to keep listening.',
+  ],
 ]
 
-const STEPS = [
-  { n: '01', title: 'Bring a document', body: 'Drop in a file or paste a link — a paper, a book, an article.' },
-  { n: '02', title: 'Sangyin reads it', body: 'It parses the text and reads aloud in a natural voice, highlighting as it goes.' },
-  { n: '03', title: 'Listen anywhere', body: 'Pick up right where you left off, on any device.' },
+const STEPS: Array<[string, string, string]> = [
+  ['Bring', 'A file or a link', 'PDF, EPUB, DOCX, TXT, pasted text, or a web page.'],
+  ['Listen', 'Natural voice, streamed', 'It starts reading in seconds, sentence by sentence.'],
+  ['Follow', 'Highlighted live', 'In the text and on the original page as it reads.'],
 ]
 
 export function Landing() {
   return (
     <>
       <header className="nav">
-        <div className="wrap nav__inner">
+        <div className="wrap nav__in">
           <a className="brand" href={APP_URL}>
-            <span className="brand__mark">桑吟</span>
-            <span className="brand__name">Sangyin</span>
+            <span className="brand__mk">桑吟</span>
+            <VoiceLine kind="brand" className="brand__wave voiceline" />
+            <span className="brand__nm">Sangyin</span>
           </a>
-          <a className="btn btn--primary" href={APP_URL}>
+          <a className="btn btn--line mini" href={APP_URL}>
             Open the reader
           </a>
         </div>
@@ -59,64 +51,93 @@ export function Landing() {
 
       <main>
         <section className="hero">
-          <div className="wrap hero__grid">
-            <div>
-              <p className="hero__eyebrow">A reader that reads to you</p>
-              <h1 className="hero__title">
-                Your documents, <em>read aloud.</em>
-              </h1>
-              <p className="hero__sub">
-                Sangyin turns any PDF, EPUB, or web page into a natural-voice audiobook —
-                with AI summaries, highlights, and your place kept in sync across every device.
-              </p>
-              <div className="hero__cta">
-                <a className="btn btn--primary" href={APP_URL}>
-                  Open the reader
-                </a>
-                <a className="btn btn--ghost" href="#how">
-                  How it works
-                </a>
+          <div className="wrap">
+            <p className="label hero__eye">Sangyin · a reader that reads to you</p>
+            <h1 className="hero__h1">
+              Read with your <span className="say">ears.</span>
+            </h1>
+            <div className="hero__cols">
+              <div>
+                <div className="recite">
+                  <p className="recite__text">
+                    Sangyin turns any PDF, EPUB, or web page into a natural-voice audiobook.{' '}
+                    <mark>It reads every sentence aloud and highlights it as it goes</mark> — right
+                    on the page, even for scanned documents.
+                  </p>
+                  <div className="recite__player">
+                    <button className="play" aria-label="Playing">
+                      <svg viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 3l9 5-9 5z" />
+                      </svg>
+                    </button>
+                    <VoiceLine kind="hero" className="recite__wave voiceline" />
+                    <span className="recite__time">4:12 / 9:48</span>
+                  </div>
+                </div>
               </div>
-              <p className="hero__formats">PDF · EPUB · DOCX · TXT · Web links</p>
-            </div>
-            <div>
-              <ReaderMock />
+              <div>
+                <div className="hero__cta">
+                  <a className="btn" href={APP_URL}>
+                    Open the reader
+                  </a>
+                  <a className="btn btn--line" href="#how">
+                    How it works
+                  </a>
+                </div>
+                <p className="label hero__formats">PDF · EPUB · DOCX · TXT · Links</p>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="section" id="features">
+        <section className="band">
           <div className="wrap">
-            <div className="section__head">
-              <p className="section__kicker">What it does</p>
-              <h2 className="section__title">Everything you’ve been meaning to read, finally read to you.</h2>
+            <div className="head">
+              <p className="label head__k">What it does</p>
+              <h2 className="head__t">Five things, done well.</h2>
             </div>
-            <div className="features">
-              {FEATURES.map((f) => (
-                <article className="feature" key={f.glyph}>
-                  <span className="feature__glyph" aria-hidden="true">
-                    {f.glyph}
-                  </span>
-                  <h3 className="feature__title">{f.title}</h3>
-                  <p className="feature__body">{f.body}</p>
-                </article>
+            <div className="index">
+              {FEATURES.map(([title, body], i) => (
+                <div className="row" key={title}>
+                  <div className="row__n">{String(i + 1).padStart(2, '0')}</div>
+                  <div className="row__b">
+                    <h3>{title}</h3>
+                    <p>{body}</p>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="how section" id="how">
+        <section className="listen">
           <div className="wrap">
-            <div className="section__head">
-              <p className="section__kicker">How it works</p>
-              <h2 className="section__title">Three steps to a listenable library.</h2>
+            <p className="label listen__k">The voice</p>
+            <h2 className="listen__t">
+              A voice that sounds like someone who <em>means it</em>.
+            </h2>
+            <VoiceLine kind="listen" className="listen__wave voiceline" />
+            <a className="btn btn--onDark" href={APP_URL}>
+              Open the reader
+            </a>
+          </div>
+        </section>
+
+        <section className="band" id="how">
+          <div className="wrap">
+            <div className="head">
+              <p className="label head__k">How it works</p>
             </div>
-            <div className="steps">
-              {STEPS.map((s) => (
-                <div className="step" key={s.n}>
-                  <div className="step__n">{s.n}</div>
-                  <h3 className="step__title">{s.title}</h3>
-                  <p className="step__body">{s.body}</p>
+            <p className="how__line">
+              Bring a document, and Sangyin <b>parses it</b>, <b>reads it aloud</b>, and{' '}
+              <b>highlights as it goes</b> — so the reading gets done while your eyes rest.
+            </p>
+            <div className="how__meta">
+              {STEPS.map(([k, t, b]) => (
+                <div className="m" key={k}>
+                  <span>{k}</span>
+                  <b>{t}</b>
+                  <p>{b}</p>
                 </div>
               ))}
             </div>
@@ -125,11 +146,12 @@ export function Landing() {
 
         <section className="close">
           <div className="wrap">
-            <div className="close__mark" aria-hidden="true">
+            <div className="close__mk" aria-hidden="true">
               桑吟
             </div>
-            <h2 className="close__title">Start listening to what you’ve been meaning to read.</h2>
-            <a className="btn btn--primary" href={APP_URL}>
+            <VoiceLine kind="close" className="close__wave voiceline" />
+            <h2 className="close__t">Start listening to what you’ve meant to read.</h2>
+            <a className="btn" href={APP_URL}>
               Open the reader
             </a>
           </div>
@@ -137,9 +159,11 @@ export function Landing() {
       </main>
 
       <footer className="foot">
-        <div className="wrap foot__inner">
-          <span>桑吟 Sangyin — a reader that reads to you.</span>
-          <a className="btn btn--ghost" href={APP_URL}>
+        <div className="wrap foot__in">
+          <span className="brand">
+            <span className="brand__mk">桑吟</span>&nbsp;&nbsp;a reader that reads to you.
+          </span>
+          <a className="btn btn--line mini" href={APP_URL}>
             Open the reader
           </a>
         </div>

@@ -77,9 +77,9 @@ export function Landing() {
             <span className="seal">桑</span>
             <span className="brand-text">Sangyin</span>
           </div>
-          <button 
-            className="btn-outline" 
-            onClick={() => window.location.href = '/app'}
+          <button
+            className="btn-outline"
+            onClick={() => window.location.href = 'sangyin/'}
           >
             Skip to App
           </button>
@@ -143,9 +143,9 @@ export function Landing() {
             </div>
 
             <div className="final-cta" style={{ opacity: 0, transform: 'translateY(20px)', marginTop: '4rem' }}>
-              <button 
-                className="btn-primary" 
-                onClick={() => window.location.href = '/app'}
+              <button
+                className="btn-primary"
+                onClick={() => window.location.href = 'sangyin/'}
               >
                 Open the Reader
               </button>

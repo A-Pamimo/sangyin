@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -27,7 +27,7 @@ import { sfx } from '../src/sfx/sfx';
 import { useApi, useAppStore } from '../src/store/appStore';
 import { mix, Palette, tokens, useTheme } from '../src/theme';
 
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -228,6 +228,11 @@ export default function ReaderScreen() {
               index: s.index,
               offsetSec: s.offset_sec,
               durationSec: s.duration_sec,
+              words: s.words?.map((w) => ({
+                text: w.text,
+                offsetSec: w.offset_sec,
+                durationSec: w.duration_sec,
+              })),
             })),
           });
         }
@@ -262,14 +267,17 @@ export default function ReaderScreen() {
     }
   };
 
-  const onTapSentence = (sentenceIndex: number) => {
-    if (!chapter) return;
-    if (isNatural && !naturalReady) {
-      if (pregen?.status !== 'generating') preparePregen();
-      return;
-    }
-    startStreaming(chapter, true, sentenceIndex);
-  };
+  const onTapSentence = useCallback(
+    (sentenceIndex: number) => {
+      if (!chapter) return;
+      if (isNatural && !naturalReady) {
+        if (pregen?.status !== 'generating') preparePregen();
+        return;
+      }
+      startStreaming(chapter, true, sentenceIndex);
+    },
+    [chapter, isNatural, naturalReady, pregen?.status, startStreaming],
+  );
 
   const onSelectChapter = (i: number) => {
     abortRef.current?.abort();
@@ -420,18 +428,16 @@ export default function ReaderScreen() {
             const active = item.index === state.currentIndex;
             const played = state.currentIndex >= 0 && item.index < state.currentIndex;
             return (
-              <Pressable onPress={() => onTapSentence(item.index)} style={active ? styles.sentenceWrapActive : styles.sentenceWrap}>
-                <Text
-                  style={[
-                    active ? styles.sentenceActive : styles.sentence,
-                    played && !active && { opacity: 0.4 },
-                    !played && !active && { opacity: 0.65 },
-                  ]}
-                >
-                  {item.text}{' '}
-                </Text>
-                {active && <View style={styles.sentenceMarker} />}
-              </Pressable>
+              <SentenceRow
+                index={item.index}
+                text={item.text}
+                active={active}
+                played={played}
+                wordFrac={active ? state.wordFrac : 0}
+                styles={styles}
+                accent={colors.accent}
+                onTap={onTapSentence}
+              />
             );
           }}
         />
@@ -569,6 +575,70 @@ export default function ReaderScreen() {
     </View>
   );
 }
+
+const NON_ALNUM = /[^a-z0-9]+/g;
+const normLen = (s: string): number => s.toLowerCase().replace(NON_ALNUM, '').length;
+
+type ReaderStyles = ReturnType<typeof makeStyles>;
+
+/**
+ * One sentence in the reading pane. The active sentence renders word-by-word so the
+ * spoken words fill with the accent colour as `wordFrac` (0–1) advances — a karaoke
+ * sweep. Inactive rows render as a single dimmed line. Memoised so that, while one
+ * sentence sweeps, the other visible rows don't re-render on every word tick.
+ */
+const SentenceRow = memo(function SentenceRow({
+  index,
+  text,
+  active,
+  played,
+  wordFrac,
+  styles,
+  accent,
+  onTap,
+}: {
+  index: number;
+  text: string;
+  active: boolean;
+  played: boolean;
+  wordFrac: number;
+  styles: ReaderStyles;
+  accent: string;
+  onTap: (index: number) => void;
+}) {
+  if (!active) {
+    return (
+      <Pressable onPress={() => onTap(index)} style={styles.sentenceWrap}>
+        <Text style={[styles.sentence, { opacity: played ? 0.4 : 0.65 }]}>{text} </Text>
+      </Pressable>
+    );
+  }
+
+  // Split into word / whitespace tokens (whitespace kept so wrapping matches the
+  // plain render), then light each word once the sweep reaches its start position.
+  const parts = text.split(/(\s+)/);
+  const lens = parts.map((p) => normLen(p));
+  const total = lens.reduce((a, b) => a + b, 0) || 1;
+  let acc = 0;
+  return (
+    <Pressable onPress={() => onTap(index)} style={styles.sentenceWrapActive}>
+      <Text style={styles.sentenceActive}>
+        {parts.map((p, i) => {
+          const startFrac = acc / total;
+          acc += lens[i];
+          const isWord = lens[i] > 0;
+          const lit = isWord && wordFrac > startFrac;
+          return (
+            <Text key={i} style={lit ? { color: accent } : undefined}>
+              {p}
+            </Text>
+          );
+        })}{' '}
+      </Text>
+      <View style={styles.sentenceMarker} />
+    </Pressable>
+  );
+});
 
 function AnimatedPlayButton({
   playing,

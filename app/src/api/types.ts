@@ -41,6 +41,14 @@ export interface Voice {
   gender: 'male' | 'female';
 }
 
+/** One spoken word's timing within a phrase clip (for word-level highlighting). */
+export interface ChunkWord {
+  text: string;
+  /** Start of this word within the phrase audio, in seconds. */
+  offset_sec: number;
+  duration_sec: number;
+}
+
 /** One sentence's slice of a phrase clip, used to move the highlight in sync. */
 export interface ChunkSentence {
   index: number;
@@ -48,6 +56,9 @@ export interface ChunkSentence {
   /** Start of this sentence within the phrase audio, in seconds. */
   offset_sec: number;
   duration_sec: number;
+  /** Per-word timings within the phrase clip. Empty when the engine has no timestamps
+   * (the client then falls back to a linear sweep across the sentence). */
+  words?: ChunkWord[];
 }
 
 /**

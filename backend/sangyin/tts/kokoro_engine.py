@@ -16,21 +16,44 @@ from ..models import Voice
 
 logger = logging.getLogger(__name__)
 
-# A curated subset of Kokoro v1.0 voices. The model ships ~54 voices across 8 languages;
-# these are the most natural English ones. Add more here as needed — ids must match
-# Kokoro's voice files (see hf.co/hexgrad/Kokoro-82M/tree/main/voices).
+# The full English voice set from Kokoro v1.0. The model ships ~54 voices across 8
+# languages; these are the English ones (lang codes "a" = American, "b" = British),
+# which need no extra dependencies. ids must match Kokoro's voice files
+# (see hf.co/hexgrad/Kokoro-82M/blob/main/VOICES.md). Other-language voices need
+# their misaki language extras installed before being added here.
 KOKORO_VOICES: list[Voice] = [
+    # American female
     Voice(id="af_heart", name="Heart (US, female)", lang_code="a", gender="female"),
     Voice(id="af_bella", name="Bella (US, female)", lang_code="a", gender="female"),
     Voice(id="af_nicole", name="Nicole (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_aoede", name="Aoede (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_kore", name="Kore (US, female)", lang_code="a", gender="female"),
     Voice(id="af_sarah", name="Sarah (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_nova", name="Nova (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_sky", name="Sky (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_alloy", name="Alloy (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_jessica", name="Jessica (US, female)", lang_code="a", gender="female"),
+    Voice(id="af_river", name="River (US, female)", lang_code="a", gender="female"),
+    # American male
     Voice(id="am_michael", name="Michael (US, male)", lang_code="a", gender="male"),
-    Voice(id="am_adam", name="Adam (US, male)", lang_code="a", gender="male"),
     Voice(id="am_fenrir", name="Fenrir (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_puck", name="Puck (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_adam", name="Adam (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_echo", name="Echo (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_eric", name="Eric (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_liam", name="Liam (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_onyx", name="Onyx (US, male)", lang_code="a", gender="male"),
+    Voice(id="am_santa", name="Santa (US, male)", lang_code="a", gender="male"),
+    # British female
     Voice(id="bf_emma", name="Emma (UK, female)", lang_code="b", gender="female"),
     Voice(id="bf_isabella", name="Isabella (UK, female)", lang_code="b", gender="female"),
+    Voice(id="bf_alice", name="Alice (UK, female)", lang_code="b", gender="female"),
+    Voice(id="bf_lily", name="Lily (UK, female)", lang_code="b", gender="female"),
+    # British male
     Voice(id="bm_george", name="George (UK, male)", lang_code="b", gender="male"),
     Voice(id="bm_lewis", name="Lewis (UK, male)", lang_code="b", gender="male"),
+    Voice(id="bm_daniel", name="Daniel (UK, male)", lang_code="b", gender="male"),
+    Voice(id="bm_fable", name="Fable (UK, male)", lang_code="b", gender="male"),
 ]
 
 

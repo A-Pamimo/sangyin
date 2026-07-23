@@ -58,33 +58,46 @@ def _wav_rate(wav_bytes: bytes, default: int = 24000) -> int:
 
 def _spans_from_words(
     group: list[Sentence], words: list[dict]
-) -> list[tuple[float, float]] | None:
-    """Derive (offset, duration) per sentence from Kokoro word timestamps.
+) -> list[tuple[float, float, list[dict]]] | None:
+    """Derive (offset, duration, words) per sentence from Kokoro word timestamps.
 
     Walks the ordered word tokens, assigning them to each sentence by matching
-    normalized characters, so a sentence's end time is the end of its last word.
-    Returns None if there are no usable timings, so the caller can fall back to the
+    normalized characters, so a sentence's end time is the end of its last word. The
+    per-sentence ``words`` list (each ``{text, offset_sec, duration_sec}`` in the
+    phrase clip's timebase) drives word-level highlighting on the client. Returns None
+    if there are no usable timings, so the caller can fall back to the
     character-proportional estimate.
     """
     if not words:
         return None
-    spans: list[tuple[float, float]] = []
+    spans: list[tuple[float, float, list[dict]]] = []
     wi = 0
     n = len(words)
     prev_end = 0.0
     for s in group:
         target = _norm(s.text)
         if not target:
-            spans.append((round(prev_end, 3), 0.0))
+            spans.append((round(prev_end, 3), 0.0, []))
             continue
         acc = ""
         seg_end = prev_end
+        seg_words: list[dict] = []
         while wi < n and len(acc) < len(target):
-            acc += _norm(words[wi]["text"])
-            seg_end = float(words[wi]["end"])
+            w = words[wi]
+            acc += _norm(w["text"])
+            start = float(w["start"])
+            end = float(w["end"])
+            seg_words.append(
+                {
+                    "text": w["text"],
+                    "offset_sec": round(start, 3),
+                    "duration_sec": round(max(0.0, end - start), 3),
+                }
+            )
+            seg_end = end
             wi += 1
         dur = max(0.0, seg_end - prev_end)
-        spans.append((round(prev_end, 3), round(dur, 3)))
+        spans.append((round(prev_end, 3), round(dur, 3), seg_words))
         prev_end = seg_end
     return spans
 
@@ -103,17 +116,26 @@ def _sentence_spans(group: list[Sentence], words: list[dict], total: float) -> l
     estimate apportioned by text length."""
     tuples = _spans_from_words(group, words)
     if tuples is None:
+        # No per-word timings (engine without a timed API, or a cache-only replay):
+        # apportion the phrase duration by sentence length and emit no word spans, so
+        # the client falls back to a smooth linear sweep within each sentence.
         char_lens = [max(1, len(s.text.strip())) for s in group]
         total_chars = sum(char_lens)
         acc = 0.0
         tuples = []
         for clen in char_lens:
             dur = total * clen / total_chars
-            tuples.append((round(acc, 3), round(dur, 3)))
+            tuples.append((round(acc, 3), round(dur, 3), []))
             acc += dur
     return [
-        {"index": s.index, "text": s.text, "offset_sec": off, "duration_sec": dur}
-        for s, (off, dur) in zip(group, tuples)
+        {
+            "index": s.index,
+            "text": s.text,
+            "offset_sec": off,
+            "duration_sec": dur,
+            "words": wds,
+        }
+        for s, (off, dur, wds) in zip(group, tuples)
     ]
 
 

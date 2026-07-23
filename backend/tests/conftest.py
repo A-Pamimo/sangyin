@@ -41,8 +41,10 @@ def _build_client(monkeypatch, tmp_path, api_key: str = "") -> TestClient:
     import sangyin.api.routes_tts as routes_tts
     import sangyin.api.routes_voices as routes_voices
 
-    monkeypatch.setattr(routes_tts, "get_engine", lambda: engine)
-    monkeypatch.setattr(routes_voices, "get_engine", lambda: engine)
+    # Both call sites pass an engine-name argument (get_engine(engine_name)); accept and
+    # ignore it so the fake stands in regardless of the resolved engine name.
+    monkeypatch.setattr(routes_tts, "get_engine", lambda *_: engine)
+    monkeypatch.setattr(routes_voices, "get_engine", lambda *_: engine)
 
     from sangyin.api import create_app
 

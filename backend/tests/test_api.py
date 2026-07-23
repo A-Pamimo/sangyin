@@ -57,6 +57,9 @@ def test_tts_stream_groups_sentences_into_phrases(client):
     spans = first["sentences"]
     assert spans[0]["offset_sec"] == 0.0
     assert [s["offset_sec"] for s in spans] == sorted(s["offset_sec"] for s in spans)
+    # Every sentence carries a `words` list (empty here — the fake engine has no word
+    # timings — so the client falls back to a linear sweep).
+    assert all(isinstance(s["words"], list) for s in spans)
 
 
 def test_tts_stream_start_index_resumes(client):

@@ -9,7 +9,7 @@ import { sfx } from '../src/sfx/sfx';
 import { useAppStore } from '../src/store/appStore';
 import { Palette, THEME_LABELS, tokens, useRetro } from '../src/theme';
 
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 const SWATCHES: Record<string, string> = { sage: '#5F6B44', clay: '#B15238', loam: '#CE9A4E' };
 
 export default function SettingsScreen() {

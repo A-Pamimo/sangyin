@@ -2,12 +2,24 @@ import { AudioSink, createAudioSink, NowPlayingMeta } from './audioSink';
 
 export type { NowPlayingMeta };
 
+/** One word's timing within a phrase clip (for word-level highlight sync). */
+export interface WordSpan {
+  text: string;
+  offsetSec: number;
+  durationSec: number;
+}
+
 /** One sentence's slice within a phrase clip (for highlight sync). */
 export interface ChunkSentenceSpan {
   index: number;
   offsetSec: number;
   durationSec: number;
+  /** Per-word timings; drives the word-level sweep. May be empty. */
+  words?: WordSpan[];
 }
+
+const NON_ALNUM = /[^a-z0-9]+/g;
+const normLen = (s: string): number => s.toLowerCase().replace(NON_ALNUM, '').length;
 
 export interface PlayChunk {
   /** The phrase's first sentence index (ordering / identity). */
@@ -23,6 +35,8 @@ export interface PlayerSnapshot {
   playing: boolean;
   /** Sentence index currently being spoken, or -1. */
   currentIndex: number;
+  /** Progress (0–1) through the active sentence, for the word-level highlight sweep. */
+  wordFrac: number;
   loadedCount: number;
   finished: boolean;
   buffering: boolean;
@@ -41,6 +55,8 @@ export class PlaybackController {
   private sink: AudioSink | null = null;
   private active = false; // is a clip currently loaded in the sink?
   private activeSentence = -1;
+  private activeWord = -1; // ordinal of the spoken word within the active sentence
+  private wordFrac = 0; // progress (0–1) through the active sentence
   private rate = 1;
   private wantPlay = false;
   private buffering = false;
@@ -69,6 +85,8 @@ export class PlaybackController {
     this.sink?.stop();
     this.active = false;
     this.activeSentence = -1;
+    this.activeWord = -1;
+    this.wordFrac = 0;
     this.chunks = [];
     this.pos = 0;
     this.wantPlay = false;
@@ -170,6 +188,7 @@ export class PlaybackController {
 
     const chunk = this.chunks[i];
     this.activeSentence = this.sentenceAt(chunk, startAtSec);
+    this.updateWord(chunk, startAtSec);
     this.ensureSink().play(
       chunk.uri,
       this.rate,
@@ -195,12 +214,61 @@ export class PlaybackController {
     return spans[spans.length - 1].index;
   }
 
+  /**
+   * Recompute the word-level progress through the active sentence at clip time `t`.
+   * Uses real per-word timings when present (piecewise by normalized characters, so it
+   * tracks speech pacing), else a linear sweep across the sentence's duration. Updates
+   * {@link wordFrac} and returns the current word ordinal (for change detection).
+   */
+  private updateWord(chunk: PlayChunk, t: number): number {
+    const s = chunk.sentences.find((x) => x.index === this.activeSentence);
+    if (!s) {
+      this.wordFrac = 0;
+      return -1;
+    }
+    const words = s.words;
+    if (!words || words.length === 0) {
+      // No per-word data: linear fill across the sentence's own span. Return a bucketed
+      // pseudo-ordinal (not a real word index) so `onProgress` still emits as the sweep
+      // advances — otherwise an unchanging -1 would freeze the fallback highlight.
+      this.wordFrac = s.durationSec > 0 ? clamp01((t - s.offsetSec) / s.durationSec) : 0;
+      return Math.floor(this.wordFrac * 24);
+    }
+    const lens = words.map((w) => Math.max(1, normLen(w.text)));
+    const total = lens.reduce((a, b) => a + b, 0);
+    let chars = 0;
+    let ordinal = -1;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const end = w.offsetSec + w.durationSec;
+      if (t < w.offsetSec) break; // not started yet
+      if (t >= end) {
+        chars += lens[i]; // fully spoken
+        ordinal = i;
+        continue;
+      }
+      // Mid-word: interpolate this word's characters by its elapsed fraction.
+      const f = w.durationSec > 0 ? clamp01((t - w.offsetSec) / w.durationSec) : 1;
+      chars += lens[i] * f;
+      ordinal = i;
+      this.wordFrac = clamp01(chars / total);
+      return ordinal;
+    }
+    this.wordFrac = clamp01(chars / total);
+    return ordinal;
+  }
+
   private onProgress(t: number): void {
     const chunk = this.chunks[this.pos];
     if (!chunk) return;
     const idx = this.sentenceAt(chunk, t);
-    if (idx !== this.activeSentence) {
-      this.activeSentence = idx;
+    const sentenceChanged = idx !== this.activeSentence;
+    if (sentenceChanged) this.activeSentence = idx;
+    // Recompute the word sweep; emit when the sentence or the active word changes so
+    // re-renders track word cadence (a few Hz) rather than every progress tick.
+    const word = this.updateWord(chunk, t);
+    if (sentenceChanged || word !== this.activeWord) {
+      this.activeWord = word;
       this.emit();
     }
   }
@@ -224,9 +292,14 @@ export class PlaybackController {
     this.onChange({
       playing: this.wantPlay,
       currentIndex: this.activeSentence,
+      wordFrac: this.wordFrac,
       loadedCount: this.chunks.length,
       finished,
       buffering: this.buffering,
     });
   }
+}
+
+function clamp01(x: number): number {
+  return x < 0 ? 0 : x > 1 ? 1 : x;
 }

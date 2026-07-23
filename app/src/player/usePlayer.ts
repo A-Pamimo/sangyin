@@ -5,6 +5,7 @@ import { PlaybackController, PlayerSnapshot } from './PlaybackController';
 const INITIAL: PlayerSnapshot = {
   playing: false,
   currentIndex: -1,
+  wordFrac: 0,
   loadedCount: 0,
   finished: false,
   buffering: false,
